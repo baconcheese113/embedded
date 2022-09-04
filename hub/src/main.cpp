@@ -3,23 +3,26 @@
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 #include "utilities.h"
+#include "network.h"
+
+Network network;
 
 void main(void)
 {
   LOG_INF("Booting...");
   LOG_INF("Board: %s", CONFIG_BOARD);
-  Utilities.setup_pins();
+  Utilities::setup_pins();
 
-  Utilities.happy_dance();
-  Utilities.rgb_write(0, 0, 0, true);
+  Utilities::happy_dance();
 
   // TODO Start UART1 connection to SIM7000
 
-  // TODO network.setPower(true);
+  // TODO network.set_power(true);
 
-  // TODO network.waitForConnection();
+  // TODO network.wait_for_power_on();
 
 
+  network.initialize_access_token();
   while (1) {
 
     k_msleep(10);

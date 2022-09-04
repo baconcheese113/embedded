@@ -4,6 +4,8 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(hub)
 
 target_sources(app PRIVATE
-  src/main.c
-  src/utilities.c
+  src/main.cpp
+  src/utilities.cpp
+  src/network.cpp
+  src/token_settings.cpp
 )
