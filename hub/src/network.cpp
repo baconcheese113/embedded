@@ -18,26 +18,26 @@ static const struct gpio_dt_spec mosfet_sim = GPIO_DT_SPEC_GET(DT_NODELABEL(mosf
 static const struct device* uart1 = DEVICE_DT_GET(DT_NODELABEL(uart1));
 
 int Network::init(void) {
-    if (!device_is_ready(uart1)) {
-        printk("UART device not ready\n");
-        return 1;
-    }
-    if (!device_is_ready(mosfet_sim.port)) {
-        printk("MOSFET_SIM not ready\n");
-        return 1;
-    }
+  if (!device_is_ready(uart1)) {
+    printk("UART device not ready\n");
+    return 1;
+  }
+  if (!device_is_ready(mosfet_sim.port)) {
+    printk("MOSFET_SIM not ready\n");
+    return 1;
+  }
 
-    if (gpio_pin_configure_dt(&mosfet_sim, GPIO_OUTPUT_INACTIVE) == 0) printk("\tMOSFET_SIM pin online\n");
-    serial_init();
-    return 0;
+  if (gpio_pin_configure_dt(&mosfet_sim, GPIO_OUTPUT_INACTIVE) == 0) printk("\tMOSFET_SIM pin online\n");
+  serial_init();
+  return 0;
 }
 
 int Network::initialize_access_token(void) {
-    return initialize_token();
+  return initialize_token();
 }
 
 void Network::set_access_token(const char new_access_token[100]) {
-    save_token(new_access_token);
+  save_token(new_access_token);
 }
 
 // DynamicJsonDocument Network::send_request(char* query, BLELocalDevice* BLE) {
@@ -183,190 +183,190 @@ void Network::set_access_token(const char new_access_token[100]) {
 // }
 
 void Network::set_fun_mode(bool full_functionality) {
-    char command[11]{};
-    snprintk(command, 11, "AT+CFUN=%d\r", full_functionality ? 1 : 4);
-    serial_print_uart(command);
-    bool success = serial_did_return_ok(2000LL);
-    if (!success) printk("Error setting fun mode\n");
+  char command[11]{};
+  snprintk(command, 11, "AT+CFUN=%d\r", full_functionality ? 1 : 4);
+  serial_print_uart(command);
+  bool success = serial_did_return_ok(2000LL);
+  if (!success) printk("Error setting fun mode\n");
 }
 
 bool Network::get_imei() {
-    memset(buffer, 0, MSG_SIZE);
-    serial_print_uart("AT+GSN\r");
-    int64_t timeout = k_uptime_get() + 2000LL;
-    size_t len = 0;
-    while (k_uptime_get() < timeout)
-    {
-        if (k_msgq_get(&uart_msgq, &buffer, K_NO_WAIT) == 0) {
-            if (strlen(device_imei) > 10 && strcmp(buffer, "OK") == 0) {
-                return true;
-            } else {
-                len = strlen(buffer);
-                strncpy(device_imei, buffer, len);
-                device_imei[len] = '\0';
-            }
-        }
+  memset(buffer, 0, MSG_SIZE);
+  serial_print_uart("AT+GSN\r");
+  int64_t timeout = k_uptime_get() + 2000LL;
+  size_t len = 0;
+  while (k_uptime_get() < timeout)
+  {
+    if (k_msgq_get(&uart_msgq, &buffer, K_NO_WAIT) == 0) {
+      if (strlen(device_imei) > 10 && strcmp(buffer, "OK") == 0) {
+        return true;
+      } else {
+        len = strlen(buffer);
+        strncpy(device_imei, buffer, len);
+        device_imei[len] = '\0';
+      }
     }
-    memset(device_imei, 0, len);
-    return false;
+  }
+  memset(device_imei, 0, len);
+  return false;
 }
 
 bool Network::configure_modem(void) {
-    if (!is_powered_on()) return false;
-    serial_print_uart("AT+IPR=115200\r");
-    bool ret = serial_did_return_ok(2000LL);
-    if (!ret) printk("Unable to configure IPR\n");
-    return ret;
+  if (!is_powered_on()) return false;
+  serial_print_uart("AT+IPR=115200\r");
+  bool ret = serial_did_return_ok(2000LL);
+  if (!ret) printk("Unable to configure IPR\n");
+  return ret;
 }
 
 bool Network::wait_for_power_on(void) {
-    if (is_powered_on()) {
-        printk("\tAlready powered on\n");
+  if (is_powered_on()) {
+    printk("\tAlready powered on\n");
+    return true;
+  }
+  int64_t startTime = k_uptime_get();
+  char tx_buf[MSG_SIZE]{};
+  int64_t timeout = k_uptime_get() + 2000LL;
+  while (k_uptime_get() < timeout) {
+    if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
+      if (strcmp("SMS Ready", tx_buf) == 0) {
+        printk("\tPowered On! Took %llims\n", k_uptime_get() - startTime);
         return true;
+      }
     }
-    int64_t startTime = k_uptime_get();
-    char tx_buf[MSG_SIZE]{};
-    int64_t timeout = k_uptime_get() + 2000LL;
-    while (k_uptime_get() < timeout) {
-        if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
-            if (strcmp("SMS Ready", tx_buf) == 0) {
-                printk("\tPowered On! Took %llims\n", k_uptime_get() - startTime);
-                return true;
-            }
-        }
-    }
-    return false;
+  }
+  return false;
 }
 
 int8_t Network::get_reg_status() {
-    char resp[4]{};
-    serial_purge();
+  char resp[4]{};
+  serial_purge();
 
-    char tx_buf[MSG_SIZE];
-    serial_print_uart("AT+CREG?\r");
-    int64_t timeout = k_uptime_get() + 2000LL;
-    while (k_uptime_get() < timeout)
-    {
-        if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
-            if (strlen(resp) > 1 && strcmp(tx_buf, "OK") == 0) {
-                return true;
-            } else if (strncmp(tx_buf, "+CREG: ", 7) == 0) {
-                strncpy(resp, tx_buf + 7, 4);
-                resp[3] = '\0';
-            }
-        }
+  char tx_buf[MSG_SIZE];
+  serial_print_uart("AT+CREG?\r");
+  int64_t timeout = k_uptime_get() + 2000LL;
+  while (k_uptime_get() < timeout)
+  {
+    if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
+      if (strlen(resp) > 1 && strcmp(tx_buf, "OK") == 0) {
+        return true;
+      } else if (strncmp(tx_buf, "+CREG: ", 7) == 0) {
+        strncpy(resp, tx_buf + 7, 4);
+        resp[3] = '\0';
+      }
     }
+  }
 
-    int8_t status = resp[2] - '0';
-    if (status != last_status) {
-        char details[35];
-        // Only print status if it has changed
-        if (status == 0) strcpy(details, "Not registered, not searching");
-        else if (status == 1) strcpy(details, "Registered, Home network");
-        else if (status == 2) strcpy(details, "Not registered, searching");
-        else if (status == 3) strcpy(details, "Registration denied");
-        else if (status == 4) strcpy(details, "Unknown, possibly out of range");
-        else if (status == 5) strcpy(details, "Registered, roaming");
-        else strcpy(details, "ERROR");
-        last_status = status;
+  int8_t status = resp[2] - '0';
+  if (status != last_status) {
+    char details[35];
+    // Only print status if it has changed
+    if (status == 0) strcpy(details, "Not registered, not searching");
+    else if (status == 1) strcpy(details, "Registered, Home network");
+    else if (status == 2) strcpy(details, "Not registered, searching");
+    else if (status == 3) strcpy(details, "Registration denied");
+    else if (status == 4) strcpy(details, "Unknown, possibly out of range");
+    else if (status == 5) strcpy(details, "Registered, roaming");
+    else strcpy(details, "ERROR");
+    last_status = status;
 
-        if (strcmp(details, "ERROR") == 0) {
-            printk("Registration status unknown\n");
-        } else printk("Registration Status: %s\n", details);
-    }
-    return status;
+    if (strcmp(details, "ERROR") == 0) {
+      printk("Registration status unknown\n");
+    } else printk("Registration Status: %s\n", details);
+  }
+  return status;
 }
 
 int8_t Network::get_acc_tech(void) {
-    if (last_status != 1 && last_status != 5) return -1;
-    char resp[30]{};
-    char tx_buf[MSG_SIZE]{};
-    bool success = false;
-    serial_purge();
-    serial_print_uart("AT+CREG=2\r");
-    if (!serial_did_return_ok(2000LL)) return -1;
+  if (last_status != 1 && last_status != 5) return -1;
+  char resp[30]{};
+  char tx_buf[MSG_SIZE]{};
+  bool success = false;
+  serial_purge();
+  serial_print_uart("AT+CREG=2\r");
+  if (!serial_did_return_ok(2000LL)) return -1;
 
-    serial_print_uart("AT+CREG?\r");
-    // Utilities::readUntilResp("AT+CREG?\r\r\n+CREG: ", resp);
-    success = false;
-    int64_t timeout = k_uptime_get() + 2000LL;
-    while (k_uptime_get() < timeout) {
-        if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
-            if (strlen(resp) > 10 && strcmp(tx_buf, "OK") == 0) {
-                success = true;
-                break;
-            } else if (strncmp(tx_buf, "+CREG: ", 7) == 0) {
-                strncpy(resp, tx_buf + 7, 4);
-                resp[3] = '\0';
-            }
-        }
+  serial_print_uart("AT+CREG?\r");
+  // Utilities::readUntilResp("AT+CREG?\r\r\n+CREG: ", resp);
+  success = false;
+  int64_t timeout = k_uptime_get() + 2000LL;
+  while (k_uptime_get() < timeout) {
+    if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
+      if (strlen(resp) > 10 && strcmp(tx_buf, "OK") == 0) {
+        success = true;
+        break;
+      } else if (strncmp(tx_buf, "+CREG: ", 7) == 0) {
+        strncpy(resp, tx_buf + 7, 4);
+        resp[3] = '\0';
+      }
     }
-    if (!success) return -1;
+  }
+  if (!success) return -1;
 
-    int8_t status = resp[2] - '0';
-    int8_t accTech = -1;
+  int8_t status = resp[2] - '0';
+  int8_t accTech = -1;
 
-    if (status == 1 || status == 5) {
-        char details[30]{};
-        // We're registered, print access technology
-        accTech = resp[strlen(resp) - 1] - '0';
-        if (accTech == 0) strcpy(details, "GSM");
-        else if (accTech == 2) strcpy(details, "UTRAN");
-        else if (accTech == 3) strcpy(details, "GSM w/EGPRS");
-        else if (accTech == 4) strcpy(details, "UTRAN w/HSDPA");
-        else if (accTech == 5) strcpy(details, "UTRAN w/HSUPA");
-        else if (accTech == 6) strcpy(details, "UTRAN w/HSDPA and w/HSUPA");
-        else if (accTech == 7) strcpy(details, "E-UTRAN");
-        else strcpy(details, "ERROR");
+  if (status == 1 || status == 5) {
+    char details[30]{};
+    // We're registered, print access technology
+    accTech = resp[strlen(resp) - 1] - '0';
+    if (accTech == 0) strcpy(details, "GSM");
+    else if (accTech == 2) strcpy(details, "UTRAN");
+    else if (accTech == 3) strcpy(details, "GSM w/EGPRS");
+    else if (accTech == 4) strcpy(details, "UTRAN w/HSDPA");
+    else if (accTech == 5) strcpy(details, "UTRAN w/HSUPA");
+    else if (accTech == 6) strcpy(details, "UTRAN w/HSDPA and w/HSUPA");
+    else if (accTech == 7) strcpy(details, "E-UTRAN");
+    else strcpy(details, "ERROR");
 
-        if (strcmp(details, "ERROR") == 0) {
-            printk("Registration network unknown\n");
-        } else printk("Registration on network: %s\n", details);
-    }
+    if (strcmp(details, "ERROR") == 0) {
+      printk("Registration network unknown\n");
+    } else printk("Registration on network: %s\n", details);
+  }
 
-    serial_print_uart("AT+CREG=0\r");
-    if (!serial_did_return_ok(2000LL)) return -1;
-    return accTech;
+  serial_print_uart("AT+CREG=0\r");
+  if (!serial_did_return_ok(2000LL)) return -1;
+  return accTech;
 }
 
 void Network::set_power(bool on) {
-    gpio_pin_set_dt(&mosfet_sim, on ? 1 : 0);
-    if (on) {
-        printk("Powering on SIM module...\n");
-        last_status = -1;
-    } else {
-        printk("Powering off SIM module...\n");
-    }
+  gpio_pin_set_dt(&mosfet_sim, on ? 1 : 0);
+  if (on) {
+    printk("Powering on SIM module...\n");
+    last_status = -1;
+  } else {
+    printk("Powering off SIM module...\n");
+  }
 }
 
 bool Network::is_powered_on(void) {
-    serial_print_uart("AT\r");
-    return serial_did_return_ok(100LL);
+  serial_print_uart("AT\r");
+  return serial_did_return_ok(100LL);
 }
 
 bool Network::set_power_on_and_wait_for_reg(void) {
-    int64_t start_time = k_uptime_get();
-    set_power(true);
-    if (!wait_for_power_on()) {
-        set_power(false);
-        return false;
-    }
-    int8_t regStatus = -1;
-    while (k_uptime_get() < start_time + 30000LL) {
-        regStatus = get_reg_status();
-        if (regStatus == 5 || regStatus == 1) break;
-        k_msleep(50);
-    }
-    if (regStatus != 5 && regStatus != 1) {
-        set_power(false);
-        return false;
-    }
-    if (get_acc_tech() == -1) {
-        set_power(false);
-        return false;
-    }
-    printk("Registered! Total Boot up time(ms): %lld\n", k_uptime_get() - start_time);
-    return true;
+  int64_t start_time = k_uptime_get();
+  set_power(true);
+  if (!wait_for_power_on()) {
+    set_power(false);
+    return false;
+  }
+  int8_t regStatus = -1;
+  while (k_uptime_get() < start_time + 30000LL) {
+    regStatus = get_reg_status();
+    if (regStatus == 5 || regStatus == 1) break;
+    k_msleep(50);
+  }
+  if (regStatus != 5 && regStatus != 1) {
+    set_power(false);
+    return false;
+  }
+  if (get_acc_tech() == -1) {
+    set_power(false);
+    return false;
+  }
+  printk("Registered! Total Boot up time(ms): %lld\n", k_uptime_get() - start_time);
+  return true;
 }
 // IMEI example
 // 065 084 043 071 083 078 013 013 010 
