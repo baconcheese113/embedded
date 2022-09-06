@@ -2,8 +2,8 @@
 #include <device.h>
 #include <drivers/pwm.h>
 #include <math.h>
-#include <logging/log.h>
-LOG_MODULE_REGISTER(utilities, CONFIG_LOG_DEFAULT_LEVEL);
+#include <zephyr/sys/printk.h>
+#include <string.h>
 
 #include "utilities.h"
 
@@ -19,7 +19,7 @@ namespace Utilities {
     if (!device_is_ready(red_pwm_led.dev) ||
       !device_is_ready(green_pwm_led.dev) ||
       !device_is_ready(blue_pwm_led.dev)) {
-      LOG_ERR("Error: one or more PWM devices not ready\n");
+      printk("Error: one or more PWM devices not ready\n");
       return -1;
     }
     return 0;
@@ -27,7 +27,7 @@ namespace Utilities {
 
   void rgb_write(uint8_t r, uint8_t g, uint8_t b, bool print) {
     if (print) {
-      LOG_DBG("Writing rgb value: %u, %u, %u", r, g, b);
+      printk("Writing rgb value: %u, %u, %u\n", r, g, b);
     }
     uint8_t divisor = 5;
     pwm_set_pulse_dt(&red_pwm_led, r * STEP_SIZE / divisor);
@@ -52,13 +52,13 @@ namespace Utilities {
         red = 255, green = 0; blue = round((360 - angle) * 4.25 - 0.01);
       }
       rgb_write(red, green, blue, false);
-      k_msleep(2);
+      k_msleep(8);
     }
-    rgb_write(0, 0, 0, false);
+    rgb_write(0, 0, 0);
   }
 
   Command parse_raw_command(char* raw_cmd) {
-    LOG_DBG("in parse_raw_cmd");
+    printk("in parse_raw_cmd\n");
     Command res;
     int8_t value_start_idx = -1;
     for (uint8_t i = 0; i < strlen(raw_cmd); i++) {
@@ -70,9 +70,8 @@ namespace Utilities {
         res.type[i] = raw_cmd[i];
       }
     }
-    if (!strlen(res.type)) LOG_WRN("Error: Couldn't parse type");
-    if (!strlen(res.value)) LOG_WRN("Error: Couldn't parse value");
+    if (!strlen(res.type)) printk("Error: Couldn't parse type\n");
+    if (!strlen(res.value)) printk("Error: Couldn't parse value\n");
     return res;
   }
-
 }

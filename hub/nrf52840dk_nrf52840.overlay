@@ -27,7 +27,16 @@ pwm0_sleep: &pwm0_sleep {
 		low-power-enable;
 	};
 };
+
+uart1: &arduino_serial{};
 / {
+    mosfets {
+        compatible = "gpio-keys";
+        mosfet_sim: mosfet_0 {
+            gpios = <&gpio1 6 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+            label = "Gate for SIM7000";
+        };
+    };
     
     pwmleds {
         compatible = "pwm-leds";

@@ -13,12 +13,20 @@ typedef struct {
 **/
 extern token_data_t token_data;
 
-/** Initializes settings and prints token_val if previously set
- * @returns 1 if previously set, 0 otherwise
- */
-uint8_t initialize_token();
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-// Saves token_val to NVS
-void save_token(const char new_access_token[100]);
+    /** Initializes settings and prints token_val if previously set
+     * @returns 1 if previously set, 0 otherwise
+     */
+    uint8_t initialize_token();
+
+    // Saves token_val to NVS
+    void save_token(const char new_access_token[100]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

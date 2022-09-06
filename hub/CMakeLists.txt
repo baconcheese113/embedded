@@ -7,5 +7,8 @@ target_sources(app PRIVATE
   src/main.cpp
   src/utilities.cpp
   src/network.cpp
-  src/token_settings.cpp
+  src/token_settings.c
+  src/ble.cpp
+  src/serial.c
+  src/alarm.c
 )

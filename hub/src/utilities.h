@@ -1,6 +1,8 @@
 #ifndef HUB_UTILITIES_H
 #define HUB_UTILITIES_H
 
+#include <zephyr/drivers/uart.h>
+
 struct Command {
   char type[30]{};
   char value[50]{};
@@ -21,6 +23,7 @@ namespace Utilities {
 
   /// @brief Watch the LEDs dance and rejoice 
   void happy_dance(void);
+
   /**
    * Parses BLE char arrays separated by a colon ( : ) delimeter into a Command struct
    * Prints an error message if unable to parse
