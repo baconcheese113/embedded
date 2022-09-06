@@ -11,4 +11,5 @@ target_sources(app PRIVATE
   src/ble.cpp
   src/serial.c
   src/alarm.c
+  src/location.cpp
 )

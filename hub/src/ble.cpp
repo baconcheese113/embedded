@@ -96,6 +96,7 @@ int adv_led_interval_cb(void) {
 
 int init_ble(void) {
   int err = bt_enable(NULL);
+  if (IS_ENABLED(CONFIG_TEST)) k_msleep(100);
   if (err != 0) {
     printk("Bluetooth init failed (err %d)\n", err);
     return err;

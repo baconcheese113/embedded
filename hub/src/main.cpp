@@ -4,11 +4,13 @@
 
 #include "utilities.h"
 #include "network.h"
+#include "location.h"
 #include "ble.h"
 
 const uint16_t VERSION = 1;
 
 Network network;
+Location location;
 
 void main(void)
 {
@@ -35,6 +37,10 @@ void main(void)
   while (!network.wait_for_power_on()) {
     printk("\tSIM module failed to power on, retrying\n");
   }
+
+  location.set_gps_power(false);
+
+  printk("\tLocation turned off\n");
   while (!network.configure_modem()) {
     printk("\tSIM module failed to be configured, retrying\n");
   }
@@ -45,7 +51,6 @@ void main(void)
   }
   printk("\t✔️  SIM module setup complete\n");
 
-  // TODO location.set_gps_power(false);
 
   printk("Intializing BLE peripheral, RTC, and button driven interrupts...\n");
   if (init_ble() == 0) {

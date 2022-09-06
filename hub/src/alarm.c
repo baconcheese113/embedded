@@ -28,7 +28,6 @@ static bool was_pressed = false;
 typedef int (*callback_ptr_t)(void);
 struct work_info {
   struct k_work work;
-  char name[25];
   callback_ptr_t callback;
 } cb_work;
 
@@ -130,8 +129,8 @@ int alarm_init(int (*button_hold_cb)(void), int (*adv_timeout_cb)(void)) {
 
   printk("\tCounters using RTC0 online\n");
 
-  printk("\t\t%d alarm channels available on RTC0\n", counter_get_num_of_channels(counter_dev));
-  printk("\t\tRTC0 frequency: %dKHz\n", counter_get_frequency(counter_dev));
+  printk("\t\t%d alarm channels available on RTC2\n", counter_get_num_of_channels(counter_dev));
+  printk("\t\tRTC2 frequency: %dKHz\n", counter_get_frequency(counter_dev));
 
   return 0;
 }
