@@ -54,6 +54,10 @@ const struct bt_le_scan_param* scan_param = BT_LE_SCAN_PASSIVE;
 
 int64_t adv_start_time;
 
+// 10 available address slots
+char* known_sensor_addrs[10];
+uint8_t known_sensor_addrs_len;
+
 int advertise_start(void) {
   if (adv_start_time > 0) {
     printk("Already advertising\n");
@@ -78,7 +82,7 @@ int advertise_stop(void) {
   }
   printk("Stopped advertising after %lld seconds\n", (k_uptime_get() - adv_start_time) / 1000);
   adv_start_time = 0;
-  Utilities::rgb_write(0, 0, 0);
+  Utilities::write_rgb(0, 0, 0);
   return 0;
 }
 
@@ -88,8 +92,8 @@ int adv_led_interval_cb(void) {
     advertise_stop();
     return 1;
   }
-  if ((k_uptime_get() / 1000) % 2 == 0) Utilities::rgb_write(75, 0, 130);
-  else Utilities::rgb_write(75, 0, 80, true);
+  if ((k_uptime_get() / 1000) % 2 == 0) Utilities::write_rgb(75, 0, 130);
+  else Utilities::write_rgb(75, 0, 80, true);
   alarm_adv_counter_set();
   return 0;
 }
@@ -145,3 +149,9 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
   .connected = connected,
   .disconnected = disconnected,
 };
+
+void add_known_sensor(char* addr) {
+  strcpy(known_sensor_addrs[known_sensor_addrs_len], addr);
+  known_sensor_addrs_len++;
+  printk("\tAdded known_sensor_addr: %s\n", addr);
+}

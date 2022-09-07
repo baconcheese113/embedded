@@ -1,6 +1,7 @@
 #include <zephyr/kernel.h>
-#include <string.h>
 #include <zephyr/sys/printk.h>
+#include <string.h>
+#include <cJSON.h>
 
 #include "utilities.h"
 #include "network.h"
@@ -61,7 +62,25 @@ void main(void)
   network.initialize_access_token();
   printk("\t✔️  Persistent storage ready\n");
 
-  // // TODO query for sensor data if token exists
+  if (/*network.has_token() &&*/ network.set_power_on_and_wait_for_reg()) {
+    char sensor_query[] = "{\"query\":\"query getMySensors{hubViewer{sensors{serial}}}\",\"variables\":{}}\r";
+    cJSON* doc = network.send_request(sensor_query);
+    cJSON* sensors = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "hubViewer"), "sensors");
+    // const char* const path[] = { "data", "hubViewer", "sensors" };
+    // cJSON* sensors = Utilities::cJSON_GetNested(doc, path);
+    if (cJSON_GetArraySize(sensors)) {
+      cJSON* sensor;
+      printk("Array size is %d\n", cJSON_GetArraySize(sensors));
+      cJSON_ArrayForEach(sensor, sensors) {
+        printk("Sensor id %d, and serial is %s\n",
+          cJSON_GetObjectItem(sensor, "id")->valueint,
+          cJSON_GetObjectItem(sensor, "serial")->valuestring
+        );
+        add_known_sensor(cJSON_GetObjectItem(sensor, "serial")->valuestring);
+      }
+    }
+    cJSON_Delete(doc);
+  }
 
   network.set_power(false);
 

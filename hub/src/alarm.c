@@ -127,7 +127,7 @@ int alarm_init(int (*button_hold_cb)(void), int (*adv_timeout_cb)(void)) {
 
   k_work_init(&cb_work.work, cb_work_fn);
 
-  printk("\tCounters using RTC0 online\n");
+  printk("\tCounters using RTC2 online\n");
 
   printk("\t\t%d alarm channels available on RTC2\n", counter_get_num_of_channels(counter_dev));
   printk("\t\tRTC2 frequency: %dKHz\n", counter_get_frequency(counter_dev));

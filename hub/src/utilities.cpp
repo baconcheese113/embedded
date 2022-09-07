@@ -1,9 +1,9 @@
-#include <zephyr.h>
-#include <device.h>
-#include <drivers/pwm.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/pwm.h>
 #include <math.h>
 #include <zephyr/sys/printk.h>
 #include <string.h>
+#include <cJSON.h>
 
 #include "utilities.h"
 
@@ -25,7 +25,7 @@ namespace Utilities {
     return 0;
   }
 
-  void rgb_write(uint8_t r, uint8_t g, uint8_t b, bool print) {
+  void write_rgb(uint8_t r, uint8_t g, uint8_t b, bool print) {
     if (print) {
       printk("Writing rgb value: %u, %u, %u\n", r, g, b);
     }
@@ -51,10 +51,10 @@ namespace Utilities {
       } else {
         red = 255, green = 0; blue = round((360 - angle) * 4.25 - 0.01);
       }
-      rgb_write(red, green, blue, false);
+      write_rgb(red, green, blue, false);
       k_msleep(8);
     }
-    rgb_write(0, 0, 0);
+    write_rgb(0, 0, 0);
   }
 
   Command parse_raw_command(char* raw_cmd) {
@@ -73,5 +73,22 @@ namespace Utilities {
     if (!strlen(res.type)) printk("Error: Couldn't parse type\n");
     if (!strlen(res.value)) printk("Error: Couldn't parse value\n");
     return res;
+  }
+
+  cJSON* cJSON_GetNested(cJSON* parent, const char* const path[]) {
+    if (!parent) return NULL;
+    uint16_t path_len = sizeof(path) / sizeof(path[0]);
+    printk("Searching for path of len %u in json response...\n", path_len);
+    cJSON* temp_obj = NULL;
+    for (int i = 0; i < path_len; i++) {
+      temp_obj = cJSON_GetObjectItemCaseSensitive(temp_obj, path[i]);
+      if (!temp_obj) {
+        printk("\tUnable to find: %s\n", path[i]);
+        return NULL;
+      } else {
+        printk("\tFound #%d temp_obj.name: %s\n", i, temp_obj->string);
+      }
+    }
+    return temp_obj;
   }
 }

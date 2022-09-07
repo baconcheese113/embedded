@@ -2,8 +2,10 @@
 #define HUB_NETWORK_H
 
 #include <zephyr/settings/settings.h>
+#include <cJSON.h>
 #include <stdint.h>
 
+#define IMEI_LEN    20
 // Needs to be large enough for error messages
 const uint16_t RESPONSE_SIZE = 2000;
 
@@ -22,7 +24,7 @@ private:
 public:
 
   // IMEI number, should be set in main during network setup by calling get_imei()
-  char device_imei[20]{};
+  char device_imei[IMEI_LEN]{};
 
   // Sets up UART and MOSFET_SIM devices
   int init(void);
@@ -33,11 +35,14 @@ public:
   // Set the access token, can also be an empty array to clear the token
   void set_access_token(const char new_access_token[100]);
 
+  // Returns true if is_valid is true 
+  bool has_token();
+
   /**
    * Sends a request containing query to API_URL, returns a json document with
    * response in the "data" field if no errors, otherwise errors will be in "errors"
   **/
-  // DynamicJsonDocument SendRequest(char* query, BLELocalDevice* BLE);
+  cJSON* send_request(char* query);
 
   /**
    * Utility function to set AT+CFUN=1 or 4 (1 = full, 4 = airplane mode)

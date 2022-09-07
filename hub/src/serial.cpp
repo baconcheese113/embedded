@@ -8,6 +8,7 @@
 static char rx_buf[MSG_SIZE];
 static uint8_t rx_buf_pos;
 
+// queue to store up to 10 messages (aligned to 4-byte boundary)
 K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 10, 4);
 
 static const struct device* uart1_dev = DEVICE_DT_GET(DT_NODELABEL(uart1));
@@ -73,15 +74,51 @@ void serial_purge(void) {
   k_msgq_purge(&uart_msgq);
 }
 
-bool serial_did_return_ok(int64_t timeout) {
+bool serial_did_return_ok(int64_t timeout, bool print) {
+  return serial_did_return_str("OK", timeout, print);
+}
+
+bool serial_did_return_str(const char* str, int64_t timeout, bool print) {
+  char tx_buf[MSG_SIZE];
+  int64_t start_time = k_uptime_get();
+  while (k_uptime_get() < start_time + timeout) {
+    if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
+      if (print) printk("\tSIM7000 says: %s\n", tx_buf);
+      if (strncmp(str, tx_buf, strlen(str)) == 0) {
+        return true;
+      } else if (strncmp("ERROR", tx_buf, 5) == 0) {
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+bool serial_read_queue(char* out_buf, int64_t timeout, bool print) {
+  char tx_buf[MSG_SIZE];
+  int64_t start_time = k_uptime_get();
+  while (k_uptime_get() < start_time + timeout) {
+    if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
+      if (print) printk("\tSIM7000 says: %s\n", tx_buf);
+      strcpy(out_buf, tx_buf);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool serial_read_raw_until(const char* str, char* out_buf, int64_t timeout) {
   char tx_buf[MSG_SIZE];
   int64_t start_time = k_uptime_get();
   while (k_uptime_get() < start_time + timeout) {
     if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
       printk("\tSIM7000 says: %s\n", tx_buf);
-      if (strcmp("OK", tx_buf) == 0) {
+      uint8_t left_padding = 0;
+      if (strncmp(str, tx_buf, strlen(str)) == 0) {
         return true;
       }
+      while (tx_buf[left_padding] == ' ') left_padding++;
+      strcpy(out_buf + strlen(out_buf), tx_buf + left_padding);
     }
   }
   return false;

@@ -2,6 +2,7 @@
 #define HUB_UTILITIES_H
 
 #include <zephyr/drivers/uart.h>
+#include <cJSON.h>
 
 struct Command {
   char type[30]{};
@@ -19,7 +20,7 @@ namespace Utilities {
   /**
    * Writes to the RGB pins the RGB values from 0 - 255
   **/
-  void rgb_write(uint8_t r, uint8_t g, uint8_t b, bool print = false);
+  void write_rgb(uint8_t r, uint8_t g, uint8_t b, bool print = false);
 
   /// @brief Watch the LEDs dance and rejoice 
   void happy_dance(void);
@@ -36,6 +37,13 @@ namespace Utilities {
   **/
   bool readUntilResp(const char* head, char* buffer, uint16_t timeout = 1000);
 
+  /**
+   * @brief Shortcut to parse through n nested objects in a cJSON object
+   * @param parent the starting cJSON object from which to search
+   * @param path an array of JSON object names to search through
+   * @return A pointer to the found cJSON object or NULL
+  */
+  cJSON* cJSON_GetNested(cJSON* parent, const char* const path[]);
 }
 
 #endif

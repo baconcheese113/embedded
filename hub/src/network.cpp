@@ -2,12 +2,15 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/sys/printk.h>
+#include <cJSON.h>
 #include <string.h>
 
 #include "network.h"
 #include "token_settings.h"
 #include "utilities.h"
 #include "serial.h"
+// #include "conf.cpp"
+const char* API_URL = "http://ptsv2.com/t/7ahpc-1662517472/post";
 
 uint8_t AT_HTTPDATA_IDX = 6;
 uint8_t AT_HTTPACTION_IDX = 7;
@@ -40,147 +43,141 @@ void Network::set_access_token(const char new_access_token[100]) {
   save_token(new_access_token);
 }
 
-// DynamicJsonDocument Network::send_request(char* query, BLELocalDevice* BLE) {
-//     Utilities::analogWriteRGB(0, 0, 60);
-//     Serial.println("Sending request");
-//     Serial.println(query);
+bool Network::has_token() {
+  return token_data.is_valid;
+}
 
-//     while (Serial1.available()) Serial.print(Serial1.read());
-//     char authCommand[55 + strlen(token_data.access_token)]{};
-//     if (token_data.is_valid) {
-//         sprintf(authCommand, "AT+HTTPPARA=\"USERDATA\",\"Authorization:Bearer %s\"", token_data.access_token);
-//     } else {
-//         strcpy(authCommand, "AT+HTTPPARA=\"USERDATA\",\"\"");
-//     }
+cJSON* Network::send_request(char* query) {
+  Utilities::write_rgb(0, 0, 60);
+  // leave off line break to catch mistakes
+  printk("Sending request:\n%s", query);
 
-//     char urlCommand[30 + strlen(API_URL)]{};
-//     sprintf(urlCommand, "AT+HTTPPARA=\"URL\",\"%s\"", API_URL);
+  serial_purge();
+  size_t command_size = 55 + strlen(token_data.access_token);
+  char auth_command[command_size]{};
+  if (token_data.is_valid) {
+    snprintk(auth_command, command_size,
+      "AT+HTTPPARA=\"USERDATA\",\"Authorization:Bearer %s\"\r", token_data.access_token);
+  } else {
+    strcpy(auth_command, "AT+HTTPPARA=\"USERDATA\",\"\"\r");
+  }
 
-//     char lenCommand[30]{};
-//     sprintf(lenCommand, "AT+HTTPDATA=%d,%d", strlen(query), 5000);
+  command_size = 30 + strlen(API_URL);
+  char url_command[30 + strlen(API_URL)]{};
+  snprintk(url_command, command_size, "AT+HTTPPARA=\"URL\",\"%s\"\r", API_URL);
 
-//     const char* const commands[] = {
-//         // "AT+SAPBR=3,1,\"APN\",\"hologram\"",
-//         // "AT+SAPBR=3,1,\"Contype\",\"GPRS\"",
-//         "AT+SAPBR=1,1",
-//         "AT+HTTPINIT",
-//         "AT+HTTPPARA=\"CID\",1",
-//         authCommand,
-//         urlCommand,
-//         "AT+HTTPPARA=\"CONTENT\",\"application/json\"",
-//         lenCommand,
-//         "AT+HTTPACTION=1",
-//         "AT+HTTPREAD",
-//         "AT+HTTPTERM",
-//         "AT+SAPBR=0,1",
-//     };
+  command_size = 30;
+  char len_command[command_size]{};
+  snprintk(len_command, command_size, "AT+HTTPDATA=%d,%d\r", strlen(query), 5000);
 
-//     char response[RESPONSE_SIZE]{};
-//     int size;
-//     unsigned int commandsLen = sizeof commands / sizeof * commands;
-//     unsigned long timeout;
-//     DynamicJsonDocument doc(RESPONSE_SIZE);
-//     Serial.print("Commands to iterate through: ");
-//     Serial.println(commandsLen);
-//     for (uint8_t attempt = 0; attempt < 3; attempt++) {
-//         for (uint8_t i = 0; i < commandsLen; i++) {
-//             // Required so that services can be read for some reason
-//             // FIXME - https://github.com/arduino-libraries/ArduinoBLE/issues/175
-//             // https://github.com/arduino-libraries/ArduinoBLE/issues/236
-//             BLE->poll();
-//             memset(buffer, 0, RESPONSE_SIZE);
-//             size = 0;
+  const char* const commands[] = {
+    // "AT+SAPBR=3,1,\"APN\",\"hologram\"",
+    // "AT+SAPBR=3,1,\"Contype\",\"GPRS\"",
+    "AT+SAPBR=1,1\r",
+    "AT+HTTPINIT\r",
+    "AT+HTTPPARA=\"CID\",1\r",
+    auth_command,
+    url_command,
+    "AT+HTTPPARA=\"CONTENT\",\"application/json\"\r",
+    len_command,
+    "AT+HTTPACTION=1\r",
+    "AT+HTTPREAD\r",
+    "AT+HTTPTERM\r",
+    "AT+SAPBR=0,1\r",
+  };
 
-//             Serial1.println(commands[i]);
-//             Serial1.flush();
-//             timeout = millis() + 1200;
-//             if (i == AT_HTTPDATA_IDX) { // send query to HTTPDATA command
-//                 char str[40]{};
-//                 uint8_t len = 0;
-//                 while (millis() < timeout) {
-//                     if (Serial1.available()) {
-//                         str[len++] = Serial1.read();
-//                         if (len >= 30) {
-//                             str[len] = '\0';
-//                             if (strcmp(str + (len - 10), "DOWNLOAD\r\n") == 0) break;
-//                         }
-//                     }
-//                 }
-//                 Serial.println(str);
-//                 Utilities::bleDelay(900, BLE); // receive NO CARRIER response without waiting this amount
-//                 Serial1.write(query);
-//                 Serial1.flush();
-//             }
-//             timeout = millis() + 5000;
-//             while (millis() < timeout) {
-//                 if (Serial1.available()) {
-//                     BLE->poll();
-//                     buffer[size] = Serial1.read();
-//                     Serial.write(buffer[size]);
-//                     size++;
-//                     if (size >= 6
-//                         && buffer[size - 1] == 10
-//                         && buffer[size - 2] == 13
-//                         && buffer[size - 5] == 10 && buffer[size - 4] == 'O' && buffer[size - 3] == 'K' // OK
-//                         ) {
-//                         if (i == AT_HTTPACTION_IDX) { // special case for AT+HTTPACTION response responding OK before query resolve :/
-//                             while (Serial1.available() < 1 && millis() < timeout) { BLE->poll(); }
-//                             while (Serial1.available() > 0 && millis() < timeout) {
-//                                 BLE->poll();
-//                                 buffer[size] = Serial1.read();
-//                                 Serial.write(buffer[size]);
-//                                 size++;
-//                             }
-//                         }
-//                         buffer[size] = '\0';
-//                         if (i == AT_HTTPREAD_IDX) { // special case for AT+HTTPREAD to extract the response
-//                             int16_t responseIdxStart = -1;
-//                             for (int idx = 0; idx < size - 7; idx++) {
-//                                 BLE->poll();
-//                                 if (responseIdxStart == -1 && buffer[idx] == '{') responseIdxStart = idx;
-//                                 if (responseIdxStart > -1) response[idx - responseIdxStart] = buffer[idx];
-//                                 if (responseIdxStart > -1 && idx == size - 8) response[idx - responseIdxStart + 1] = '\0';
-//                             }
-//                         }
-//                         break;
-//                     }
-//                 }
-//             }
-//             if (millis() >= timeout) {
-//                 Utilities::analogWriteRGB(70, 5, 0);
-//                 Serial.println(">>Network Request Timeout<<");
-//             }
-//         }
-//         Serial.print("Request complete\nResponse is: ");
-//         Serial.println(response);
+  uint16_t commands_len = sizeof(commands) / sizeof(*commands);
+  const int64_t TIMEOUT = 5000LL;
+  cJSON* doc;
 
-//         DeserializationError error = deserializeJson(doc, (const char*)response);
-//         if (error) {
-//             Serial.print("deserializeJson() failed: ");
-//             Serial.println(error.f_str());
-//             if (attempt < 2) {
-//                 Serial.print("Retrying. Attempt ");
-//                 Serial.println(attempt + 2);
-//             } else {
-//                 Serial.println("All attempts failed");
-//             }
-//         } else {
-//             Utilities::analogWriteRGB(0, 25, 0);
-//             if (doc["errors"] && doc["errors"][0]["extensions"]["code"]) {
-//                 // TODO clear knownSensorAddrs
-//                 if (strcmp(doc["errors"][0]["extensions"]["code"], "UNAUTHENTICATED") == 0) {
-//                     Serial.println("Unauthenticated: Clearing access_token");
-//                     memset(token_data.access_token, 0, 100);
-//                     token_data.is_valid = false;
-//                     kv_set(storeTokenKey, &token_data, sizeof(token_data), 0);
-//                     Serial.println("access_token cleared");
-//                 }
-//             }
-//             break;
-//         }
-//     }
-//     return doc;
-// }
+  printk("Commands to iterate through: %u\n", commands_len);
+  for (uint8_t attempt = 0; attempt < 3; attempt++) {
+    memset(buffer, 0, RESPONSE_SIZE);
+    for (uint8_t i = 0; i < commands_len; i++) {
+      serial_purge();
+      k_msleep(20);
+      serial_print_uart(commands[i]);
+      bool success = false;
+
+      if (i == AT_HTTPDATA_IDX) {
+        // AT+HTTPDATA=120,5000
+        // DOWNLOAD
+        // OK
+        // TODO gather the confidence to break on this failure
+        if (serial_did_return_str("DOWNLOAD", 1000LL)) {
+          // printk("DOWNLOAD received\n");
+        }
+        // receive NO CARRIER response without waiting this amount
+        // TODO maybe remove Utilities::bleDelay(900, BLE); 
+        k_msleep(500);
+        // printk("Awake\n");
+        serial_print_uart(query);
+        // printk("Printed query\n");
+        k_msleep(100);
+        // printk("Napped\n");
+        success = serial_did_return_ok(5000LL);
+        printk("Success is %i\n", success);
+        // bool wat = serial_did_return_ok(5000LL);
+        // printk("Wat is %i\n", wat);
+      } else if (i == AT_HTTPACTION_IDX) {
+        // AT+HTTPACTION=1
+        // OK
+        // +HTTPACTION: 1,200,27
+        if (!serial_did_return_ok(TIMEOUT)) break;
+        success = serial_did_return_str("+HTTPACTION:", TIMEOUT);
+      } else if (i == AT_HTTPREAD_IDX) {
+        // AT+HTTPREAD
+        // +HTTPREAD: 27
+        // {"data":{"user":{"id":1}}}
+        // OK
+        if (!serial_did_return_str("+HTTPREAD:", TIMEOUT)) break;
+        success = serial_read_raw_until("OK", buffer, TIMEOUT);
+      } else {
+        // AT+BOOFAR=LEET
+        // OK
+        success = serial_did_return_ok(TIMEOUT);
+      }
+      if (!success) {
+        Utilities::write_rgb(70, 5, 0);
+        printk(">>Network Request Timeout<<\n");
+      }
+    }
+    printk("Request complete\nResponse is: %s\n", buffer);
+
+    const char* error_msg = NULL;
+    doc = cJSON_ParseWithOpts(buffer, &error_msg, true);
+    if (strlen(error_msg) || !doc) {
+      printk("parseWithOpts() failed: %s\n", error_msg);
+      if (attempt < 2) {
+        printk("Retrying. Attempt %d\n", attempt + 2);
+      } else {
+        printk("All attempts failed\n");
+        cJSON_Delete(doc);
+        return NULL;
+      }
+    } else {
+      Utilities::write_rgb(0, 25, 0);
+      cJSON* errors = cJSON_GetObjectItem(doc, "errors");
+
+      if (errors) {
+        printk("Access errors returned\n");
+        cJSON* error0 = cJSON_GetArrayItem(errors, 0);
+        cJSON* extensions = cJSON_GetObjectItem(error0, "extensions");
+        char* code = cJSON_GetObjectItem(extensions, "code")->valuestring;
+        // TODO clear knownSensorAddrs
+        if (strcmp(code, "UNAUTHENTICATED") == 0) {
+          printk("Unauthenticated: Clearing access_token\n");
+          set_access_token("");
+          printk("access_token cleared\n");
+        }
+        cJSON_Delete(doc);
+        return NULL;
+      }
+      break;
+    }
+  }
+  return doc;
+}
 
 void Network::set_fun_mode(bool full_functionality) {
   char command[11]{};
@@ -191,24 +188,21 @@ void Network::set_fun_mode(bool full_functionality) {
 }
 
 bool Network::get_imei() {
-  memset(buffer, 0, MSG_SIZE);
+  char buf[IMEI_LEN]{};
+  serial_purge();
   serial_print_uart("AT+GSN\r");
-  int64_t timeout = k_uptime_get() + 2000LL;
-  size_t len = 0;
-  while (k_uptime_get() < timeout)
-  {
-    if (k_msgq_get(&uart_msgq, &buffer, K_NO_WAIT) == 0) {
-      if (strlen(device_imei) > 10 && strcmp(buffer, "OK") == 0) {
-        return true;
-      } else {
-        len = strlen(buffer);
-        strncpy(device_imei, buffer, len);
-        device_imei[len] = '\0';
-      }
-    }
+  serial_did_return_str("AT+GSN", 2000LL);
+  if (!serial_read_queue(buf, 500LL)) return false;
+
+
+  if (buf[0] >= '0' && buf[0] <= '9') {
+    strncpy(device_imei, buf, IMEI_LEN);
+  } else return false;
+  if (!serial_did_return_ok(500LL)) {
+    memset(device_imei, 0, IMEI_LEN);
+    return false;
   }
-  memset(device_imei, 0, len);
-  return false;
+  return true;
 }
 
 bool Network::configure_modem(void) {
@@ -225,37 +219,24 @@ bool Network::wait_for_power_on(void) {
     return true;
   }
   int64_t startTime = k_uptime_get();
-  char tx_buf[MSG_SIZE]{};
-  int64_t timeout = k_uptime_get() + 2000LL;
-  while (k_uptime_get() < timeout) {
-    if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
-      if (strcmp("SMS Ready", tx_buf) == 0) {
-        printk("\tPowered On! Took %llims\n", k_uptime_get() - startTime);
-        return true;
-      }
-    }
-  }
-  return false;
+  if (!serial_did_return_str("SMS Ready", 2000LL)) return false;
+
+  printk("\tPowered On! Took %llims\n", k_uptime_get() - startTime);
+  return true;
 }
 
 int8_t Network::get_reg_status() {
-  char resp[4]{};
+  char resp[5]{};
   serial_purge();
 
   char tx_buf[MSG_SIZE];
   serial_print_uart("AT+CREG?\r");
-  int64_t timeout = k_uptime_get() + 2000LL;
-  while (k_uptime_get() < timeout)
-  {
-    if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
-      if (strlen(resp) > 1 && strcmp(tx_buf, "OK") == 0) {
-        return true;
-      } else if (strncmp(tx_buf, "+CREG: ", 7) == 0) {
-        strncpy(resp, tx_buf + 7, 4);
-        resp[3] = '\0';
-      }
-    }
-  }
+
+  if (!serial_did_return_str("AT+CREG?", 1000LL, false)) return -1;
+  if (!serial_read_queue(tx_buf, 2000LL, false)) return -1;
+  // tx_buf should have "+CREG: 0,5"
+  strncpy(resp, tx_buf + 7, 5);
+  if (!serial_did_return_ok(500LL, false)) return -1;
 
   int8_t status = resp[2] - '0';
   if (status != last_status) {
@@ -281,27 +262,17 @@ int8_t Network::get_acc_tech(void) {
   if (last_status != 1 && last_status != 5) return -1;
   char resp[30]{};
   char tx_buf[MSG_SIZE]{};
-  bool success = false;
   serial_purge();
   serial_print_uart("AT+CREG=2\r");
   if (!serial_did_return_ok(2000LL)) return -1;
 
   serial_print_uart("AT+CREG?\r");
-  // Utilities::readUntilResp("AT+CREG?\r\r\n+CREG: ", resp);
-  success = false;
-  int64_t timeout = k_uptime_get() + 2000LL;
-  while (k_uptime_get() < timeout) {
-    if (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
-      if (strlen(resp) > 10 && strcmp(tx_buf, "OK") == 0) {
-        success = true;
-        break;
-      } else if (strncmp(tx_buf, "+CREG: ", 7) == 0) {
-        strncpy(resp, tx_buf + 7, 4);
-        resp[3] = '\0';
-      }
-    }
-  }
-  if (!success) return -1;
+
+  if (!serial_did_return_str("AT+CREG?", 1000LL)) return -1;
+  if (!serial_read_queue(tx_buf, 2000LL)) return -1;
+  // tx_buf should have "+CREG: 0,5,...."
+  strncpy(resp, tx_buf + 7, 30);
+  if (!serial_did_return_ok(500LL)) return -1;
 
   int8_t status = resp[2] - '0';
   int8_t accTech = -1;
@@ -330,6 +301,7 @@ int8_t Network::get_acc_tech(void) {
 }
 
 void Network::set_power(bool on) {
+  serial_purge();
   gpio_pin_set_dt(&mosfet_sim, on ? 1 : 0);
   if (on) {
     printk("Powering on SIM module...\n");
@@ -348,6 +320,7 @@ bool Network::set_power_on_and_wait_for_reg(void) {
   int64_t start_time = k_uptime_get();
   set_power(true);
   if (!wait_for_power_on()) {
+    printk("\tWait for power on failed\n");
     set_power(false);
     return false;
   }
@@ -358,10 +331,12 @@ bool Network::set_power_on_and_wait_for_reg(void) {
     k_msleep(50);
   }
   if (regStatus != 5 && regStatus != 1) {
+    printk("\tRegStatus not valid\n");
     set_power(false);
     return false;
   }
   if (get_acc_tech() == -1) {
+    printk("\tAccess tech not valid\n");
     set_power(false);
     return false;
   }

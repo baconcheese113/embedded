@@ -9,7 +9,8 @@ target_sources(app PRIVATE
   src/network.cpp
   src/token_settings.c
   src/ble.cpp
-  src/serial.c
+  src/serial.cpp
   src/alarm.c
   src/location.cpp
+  src/conf.cpp
 )

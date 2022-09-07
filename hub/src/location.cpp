@@ -78,8 +78,8 @@ bool Location::set_gps_power(bool turn_on) {
   is_powered = turn_on;
   if (turn_on) printk("\tGPS check scheduled, warming up GPS module\n");
   else printk("\tGPS module powering off\n");
-  char command[10];
-  snprintk(command, 10, "AT+CGNSPWR=%d\r", turn_on ? 1 : 0);
+  char command[15];
+  snprintk(command, 15, "AT+CGNSPWR=%d\r", turn_on ? 1 : 0);
   serial_print_uart(command);
   return serial_did_return_ok(1000LL);
 }
