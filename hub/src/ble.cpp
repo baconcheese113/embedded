@@ -105,7 +105,7 @@ struct work_info {
 
 // Have to declare here to avoid "taking address of temporary array" error
 const struct bt_le_adv_param* adv_param = BT_LE_ADV_CONN;
-const struct bt_le_scan_param* scan_param = BT_LE_SCAN_PASSIVE;
+const struct bt_le_scan_param* scan_param = BT_LE_SCAN_ACTIVE;
 const struct bt_conn_le_create_param* create_param = BT_CONN_LE_CREATE_CONN;
 const struct bt_le_conn_param* conn_param = BT_LE_CONN_PARAM_DEFAULT;
 
@@ -125,7 +125,7 @@ int advertise_start(void) {
   }
   int err = bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
   if (err != 0) {
-    printk("Error starting to advertise\n");
+    printk("Error starting to advertise (err %d)\n", err);
     return err;
   }
   printk("Starting to advertise\n");
@@ -141,7 +141,7 @@ int advertise_start(void) {
 int advertise_stop(void) {
   int err = bt_le_adv_stop();
   if (err != 0) {
-    printk("Error stopping advertisement\n");
+    printk("Error stopping advertisement (err %d)\n", err);
     return err;
   }
   printk("Stopped advertising after %lld seconds\n", (k_uptime_get() - adv_start_time) / 1000);
@@ -273,7 +273,7 @@ void start_scan(void)
   printk("Hub scanning for peripheral...\n");
 }
 
-static void handle_sensor_connected() {
+static void handle_sensor_connected_work(struct k_work* work_item) {
   char addr[BT_ADDR_LE_STR_LEN];
   bt_addr_le_to_str(bt_conn_get_dst(sensor_conn), addr, sizeof(addr));
   Utilities::write_rgb(255, 100, 200);
@@ -358,7 +358,8 @@ static void connected(struct bt_conn* conn, uint8_t err) {
   alarm_adv_counter_cancel();
   if (is_sensor) {
     advertise_stop();
-    handle_sensor_connected();
+    k_work_init(&work, handle_sensor_connected_work);
+    k_work_submit(&work);
   } else {
     phone_conn = bt_conn_ref(conn);
     advertise_stop();
