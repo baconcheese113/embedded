@@ -1,17 +1,18 @@
 #ifndef HUB_BLE_H
 #define HUB_BLE_H
 
+#include "network_requests.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
   // 10 available address slots
-  extern char* known_sensor_addrs[10];
+  extern char known_sensor_addrs[10][50];
   extern uint8_t known_sensor_addrs_len;
 
   // Enables Bluetooth, must be called before any other ble functions
-  int init_ble(void);
+  int init_ble(NetworkRequests* network_requests);
 
   /** Starts advertising
    * @return 0 on success

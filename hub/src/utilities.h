@@ -29,7 +29,7 @@ namespace Utilities {
    * Parses BLE char arrays separated by a colon ( : ) delimeter into a Command struct
    * Prints an error message if unable to parse
   **/
-  Command parseRawCommand(char* rawCmd);
+  Command parse_raw_command(char* raw_cmd);
 
   /**
    * Reads n bytes into buffer (ignoring head) from Serial1

@@ -12,5 +12,6 @@ target_sources(app PRIVATE
   src/serial.cpp
   src/alarm.c
   src/location.cpp
+  src/network_requests.cpp
   src/conf.cpp
 )

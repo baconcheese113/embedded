@@ -4,6 +4,7 @@
 #include <cJSON.h>
 
 #include "utilities.h"
+#include "network_requests.h"
 #include "network.h"
 #include "location.h"
 #include "ble.h"
@@ -12,6 +13,7 @@ const uint16_t VERSION = 1;
 
 Network network;
 Location location;
+NetworkRequests network_requests;
 
 void main(void)
 {
@@ -52,9 +54,10 @@ void main(void)
   }
   printk("\t✔️  SIM module setup complete\n");
 
+  network_requests.init(&network);
 
   printk("Intializing BLE peripheral, RTC, and button driven interrupts...\n");
-  if (init_ble() == 0) {
+  if (init_ble(&network_requests) == 0) {
     printk("\t✔️  BLE, RTC, and IRQs ready\n");
   } else return;
 
@@ -62,7 +65,7 @@ void main(void)
   network.initialize_access_token();
   printk("\t✔️  Persistent storage ready\n");
 
-  if (/*network.has_token() &&*/ network.set_power_on_and_wait_for_reg()) {
+  if (network.has_token() && network.set_power_on_and_wait_for_reg()) {
     char sensor_query[] = "{\"query\":\"query getMySensors{hubViewer{sensors{serial}}}\",\"variables\":{}}\r";
     cJSON* doc = network.send_request(sensor_query);
     cJSON* sensors = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "hubViewer"), "sensors");
@@ -86,20 +89,18 @@ void main(void)
 
   printk("\n>>>>> Setup complete in %lli(ms)! <<<<<\n\n", k_uptime_delta(&boot_time));
 
-  while (1) {
+  k_msleep(1000);
+  printk(">>>> Starting main loop <<<<\n");
+  k_msleep(2000);
+  start_scan();
+
+  // while (1) {
 
     // TODO check currentCommand for StartHubUpdate
-
-    // TODO if advertising, try to connect to phone
-    // TODO if we already have phone, listen for commands
-
-    // TODO if no peripheral, scan for sensor
-    // TODO else if peripheral not connected then connect
-    // TODO else monitor sensor 
 
     // TODO Update GPS
     // TODO Update Battery level
 
-    k_msleep(10);
+  //   k_msleep(1000);
+  // }
   }
-}

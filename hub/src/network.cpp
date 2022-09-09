@@ -12,6 +12,7 @@
 // #include "conf.cpp"
 const char* API_URL = "http://ptsv2.com/t/7ahpc-1662517472/post";
 
+uint8_t AT_SAPBR_IDX = 0;
 uint8_t AT_HTTPDATA_IDX = 6;
 uint8_t AT_HTTPACTION_IDX = 7;
 uint8_t AT_HTTPREAD_IDX = 8;
@@ -116,9 +117,7 @@ cJSON* Network::send_request(char* query) {
         k_msleep(100);
         // printk("Napped\n");
         success = serial_did_return_ok(5000LL);
-        printk("Success is %i\n", success);
-        // bool wat = serial_did_return_ok(5000LL);
-        // printk("Wat is %i\n", wat);
+        // printk("Success is %i\n", success);
       } else if (i == AT_HTTPACTION_IDX) {
         // AT+HTTPACTION=1
         // OK
@@ -135,7 +134,9 @@ cJSON* Network::send_request(char* query) {
       } else {
         // AT+BOOFAR=LEET
         // OK
-        success = serial_did_return_ok(TIMEOUT);
+        // Long delays possible setting SAPBR with GSM
+        int64_t timeout = i == AT_SAPBR_IDX ? 10000LL : TIMEOUT;
+        success = serial_did_return_ok(timeout);
       }
       if (!success) {
         Utilities::write_rgb(70, 5, 0);
@@ -196,10 +197,11 @@ bool Network::get_imei() {
 
 
   if (buf[0] >= '0' && buf[0] <= '9') {
-    strncpy(device_imei, buf, IMEI_LEN);
+    strncpy(device_imei, buf, sizeof(device_imei));
+    device_imei[strlen(buf)] = '\0';
   } else return false;
   if (!serial_did_return_ok(500LL)) {
-    memset(device_imei, 0, IMEI_LEN);
+    memset(device_imei, 0, sizeof(device_imei));
     return false;
   }
   return true;
@@ -219,7 +221,8 @@ bool Network::wait_for_power_on(void) {
     return true;
   }
   int64_t startTime = k_uptime_get();
-  if (!serial_did_return_str("SMS Ready", 2000LL)) return false;
+  // Usually takes around 6 seconds from cold boot
+  if (!serial_did_return_str("SMS Ready", 10000LL)) return false;
 
   printk("\tPowered On! Took %llims\n", k_uptime_get() - startTime);
   return true;
@@ -253,7 +256,7 @@ int8_t Network::get_reg_status() {
 
     if (strcmp(details, "ERROR") == 0) {
       printk("Registration status unknown\n");
-    } else printk("Registration Status: %s\n", details);
+    } else printk("\nRegistration Status: %s\n", details);
   }
   return status;
 }
