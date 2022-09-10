@@ -6,6 +6,8 @@
 #include "serial.h"
 #include "location.h"
 #include "utilities.h"
+#include "network.h"
+#include "network_requests.h"
 
 // TODO find from a static library
 #define M_PI           3.14159265358979323846
@@ -72,6 +74,65 @@ LocReading Location::parse_inf(char* inf_buffer) {
     }
   }
   return reading;
+}
+
+void Location::init(Network* net, NetworkRequests* network_requests) {
+  network = net;
+  network_reqs = network_requests;
+}
+
+bool Location::should_send_update() {
+  return last_gps_time == 0 || k_uptime_get() > last_gps_time + GPS_UPDATE_INTERVAL;
+}
+
+void Location::turn_off(const char* msg) {
+  if (strlen(msg)) printk("%s", msg);
+  Utilities::write_rgb(0, 0, 0);
+  set_gps_power(false);
+  network->set_power(false);
+}
+
+int Location::send_update() {
+  // warm up the module
+  Utilities::write_rgb(235, 30, 180);
+  network->set_power(true);
+  network->wait_for_power_on();
+  set_gps_power(true);
+  k_msleep(GPS_BUFFER_TIME);
+  Utilities::write_rgb(120, 10, 50);
+
+  // module is warmed up
+  last_gps_time = k_uptime_get();
+  serial_print_uart("AT+CGNSINF\r");
+  serial_did_return_str("AT+CGNSINF", 5000LL);
+  char inf_buf[50];
+  serial_read_queue(inf_buf, 5000LL);
+  if (strlen(inf_buf) < 10) {
+    turn_off("Failed to read inf from SIM module, aborting\n");
+    return -1;
+  }
+
+  // We have a reading
+  printk("\tBuffer %s\n", inf_buf);
+  LocReading reading = parse_inf(inf_buf);
+  printk("\n*****Updating GPS location*****\n");
+  if (!reading.hasFix) {
+    turn_off("No GPS fix yet, aborting\n");
+    return -1;
+  }
+  print_loc_reading(reading);
+
+  double dist = distance_from_last_point(reading.lat, reading.lng);
+  if (dist < 20) {
+    turn_off("New location is less than 20m away from previously sent location, aborting\n");
+    return -1;
+  }
+
+  int err = network_reqs->handle_update_gps_loc(reading.lat, reading.lng, reading.hdop, reading.kmph, reading.deg);
+  last_sent_reading = reading;
+  if (err) turn_off("Network request to update gps loc failed\n");
+  else turn_off("Successfully updated gps location!\n");
+  return err;
 }
 
 bool Location::set_gps_power(bool turn_on) {

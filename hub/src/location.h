@@ -1,6 +1,9 @@
 #ifndef HUB_LOCATION_H
 #define HUB_LOCATION_H
 
+#include "network_requests.h"
+#include "network.h"
+
 struct LocReading {
   bool hasFix = false;
   double lat = 0;
@@ -21,6 +24,15 @@ class Location
 
 private:
   static double get_radians(double degrees);
+
+  Network* network;
+  NetworkRequests* network_reqs;
+
+  /**
+   * @brief convienience function to turn off location/network and print a msg
+   * @param msg the string to print while shutting down
+   */
+  void turn_off(const char* msg);
 
 public:
   // The last time (in millis) that location was queried
@@ -52,6 +64,24 @@ public:
    * and return a LocReading struct
    */
   static LocReading parse_inf(char* inf_buffer);
+
+  /**
+   * @brief Set up pointers needed for network requests
+   */
+  void init(Network* net, NetworkRequests* network_requests);
+
+  /**
+   * @return true if it's time to send another network request and
+   * send_update() should be called
+   */
+  bool should_send_update();
+
+  /**
+   * @brief Blocks while warming up the modem and reading location
+   * then attempts to send it across the network
+   * @return 0 on success, -1 for any failures
+   */
+  int send_update();
 
   /**
    * Powers on/off GPS module

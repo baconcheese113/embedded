@@ -44,6 +44,16 @@ public:
    */
   int handle_update_battery_level(int real_mV, uint8_t percent);
 
+  /**
+   * @brief Callback for notifying the server of the current gps location data
+   * @param lat Latitude as 45.1234
+   * @param lng Longitude as 105.1234
+   * @param hdop Horizontal Dilution of Precision as [0,99.9]
+   * @param speed KM/hour as [0,999.99]
+   * @param course Course Over Ground as [0,360.00]
+   * @return 0 on success, -1 if failed to send
+   */
+  int handle_update_gps_loc(float lat, float lng, float hdop, float speed, float course);
 };
 
 #endif

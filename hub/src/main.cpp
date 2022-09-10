@@ -56,6 +56,7 @@ void main(void)
   printk("\t✔️  SIM module setup complete\n");
 
   network_requests.init(&network);
+  location.init(&network, &network_requests);
 
   printk("Initializing Battery functionality...\n");
   if (battery_init(&network_requests)) {
@@ -102,13 +103,14 @@ void main(void)
 
   while (1) {
 
-    // TODO check currentCommand for StartHubUpdate
+    // TODO OTA DFU
 
     if (battery_should_send_update()) {
       battery_update();
     }
-    // TODO Update GPS
-    // TODO Update Battery level
+    if (location.should_send_update()) {
+      location.send_update();
+    }
 
     k_msleep(10 * 1000);
   }

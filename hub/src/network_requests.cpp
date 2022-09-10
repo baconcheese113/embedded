@@ -128,3 +128,26 @@ int NetworkRequests::handle_update_battery_level(int real_mV, uint8_t percent) {
   return ret;
 }
 
+int NetworkRequests::handle_update_gps_loc(float lat, float lng, float hdop, float speed, float course) {
+  printk("Preparing to update gps location...\n");
+  int ret = -1;
+  if (network->set_power_on_and_wait_for_reg()) {
+    size_t len = 150;
+    char mutation[150];
+    snprintk(mutation, len, "{\"query\":\"mutation CreateLocation{createLocation(lat:%.5f, lng: %.5f, hdop: %.2f, speed: %.2f, course: %.2f, age: 0){ id }}\",\"variables\":{}}", lat, lng, hdop, speed, course);
+    cJSON* doc = network->send_request(mutation);
+    cJSON* id = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "createLocation"), "id");
+    if (id) {
+      const uint16_t id_int = (const uint16_t)(id->valueint);
+      printk("createLocation id: %u\n", id_int);
+      ret = 0;
+    } else {
+      printk("doc->id not valid\n");
+    }
+    cJSON_Delete(doc);
+  } else {
+    printk("Unable to get network connection\n");
+  }
+  network->set_power(false);
+  return ret;
+}
