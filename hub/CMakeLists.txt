@@ -14,4 +14,5 @@ target_sources(app PRIVATE
   src/location.cpp
   src/network_requests.cpp
   src/conf.cpp
+  src/battery.cpp
 )

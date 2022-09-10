@@ -4,6 +4,7 @@
 #include <cJSON.h>
 
 #include "utilities.h"
+#include "battery.h"
 #include "network_requests.h"
 #include "network.h"
 #include "location.h"
@@ -56,6 +57,11 @@ void main(void)
 
   network_requests.init(&network);
 
+  printk("Initializing Battery functionality...\n");
+  if (battery_init(&network_requests)) {
+    printk("Battery init failed\n");
+  } else printk("\tBattery reading starting from %dmV\n", battery_read().real_mV);
+
   printk("Intializing BLE peripheral, RTC, and button driven interrupts...\n");
   if (init_ble(&network_requests) == 0) {
     printk("\t✔️  BLE, RTC, and IRQs ready\n");
@@ -94,13 +100,16 @@ void main(void)
   k_msleep(2000);
   start_scan();
 
-  // while (1) {
+  while (1) {
 
     // TODO check currentCommand for StartHubUpdate
 
+    if (battery_should_send_update()) {
+      battery_update();
+    }
     // TODO Update GPS
     // TODO Update Battery level
 
-  //   k_msleep(1000);
-  // }
+    k_msleep(10 * 1000);
   }
+}

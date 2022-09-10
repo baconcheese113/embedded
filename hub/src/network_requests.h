@@ -35,6 +35,15 @@ public:
    * @return 0 on success, -1 if failed to send
    */
   int handle_add_new_sensor(char* sensor_addr);
+
+  /**
+   * @brief Callback for notifying the server of the current battery level
+   * @param real_mV the millivolts of the battery (double the measured millivolts)
+   * @param percent the estimated percentage remaining (0 - 100)
+   * @return 0 on success, -1 if failed to send
+   */
+  int handle_update_battery_level(int real_mV, uint8_t percent);
+
 };
 
 #endif

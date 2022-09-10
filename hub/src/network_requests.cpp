@@ -21,7 +21,7 @@ int NetworkRequests::handle_get_token_and_hub_id(char* user_id, uint16_t* out_hu
     cJSON* token = cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "loginAsHub");
     if (token) {
       const char* token_str = (const char*)(token->valuestring);
-      printk("loginAsHub token is: %s\nAnd strlen: %llu\n", token_str, strlen(token_str));
+      printk("loginAsHub token is: %s\nAnd strlen: %u\n", token_str, strlen(token_str));
       network->set_access_token(token_str);
       // TODO check if token is different from existing token in flash storage, if so replace it
       ret = 0;
@@ -103,3 +103,28 @@ int NetworkRequests::handle_add_new_sensor(char* sensor_addr) {
   network->set_power(false);
   return ret;
 }
+
+int NetworkRequests::handle_update_battery_level(int real_mV, uint8_t percent) {
+  printk("Preparing to update battery level...\n");
+  int ret = -1;
+  if (network->set_power_on_and_wait_for_reg()) {
+    size_t len = 150;
+    char mutation[150];
+    snprintk(mutation, len, "{\"query\":\"mutation UpdateHubBatteryLevel{updateHubBatteryLevel(volts:%.2f, percent:%d){ id }}\",\"variables\":{}}", (float)real_mV / 1000, percent);
+    cJSON* doc = network->send_request(mutation);
+    cJSON* id = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "updateHubBatteryLevel"), "id");
+    if (id) {
+      const uint16_t id_int = (const uint16_t)(id->valueint);
+      printk("updateHubBatteryLevel hub id: %u\n", id_int);
+      ret = 0;
+    } else {
+      printk("doc->id not valid\n");
+    }
+    cJSON_Delete(doc);
+  } else {
+    printk("Unable to get network connection\n");
+  }
+  network->set_power(false);
+  return ret;
+}
+

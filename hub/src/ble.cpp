@@ -4,9 +4,11 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <bluetooth/scan.h>
+#include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/sys/printk.h>
 
 #include "ble.h"
+#include "battery.h"
 #include "alarm.h"
 #include "utilities.h"
 #include "network_requests.h"
@@ -123,15 +125,16 @@ int advertise_start(void) {
     printk("Already advertising\n");
     return -1;
   }
-  int err = bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-  if (err != 0) {
-    printk("Error starting to advertise (err %d)\n", err);
-    return err;
-  }
+  int err;
   printk("Starting to advertise\n");
   err = bt_le_scan_stop();
   if (err) {
     printk("Error stopping scan (err %d)\n", err);
+  }
+  err = bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+  if (err) {
+    printk("Error starting to advertise (err %d)\n", err);
+    return err;
   }
   adv_start_time = k_uptime_get();
   alarm_adv_counter_set();
@@ -140,7 +143,7 @@ int advertise_start(void) {
 
 int advertise_stop(void) {
   int err = bt_le_adv_stop();
-  if (err != 0) {
+  if (err) {
     printk("Error stopping advertisement (err %d)\n", err);
     return err;
   }
@@ -158,7 +161,7 @@ int adv_led_interval_cb(void) {
     return 1;
   }
   if ((k_uptime_get() / 1000) % 2 == 0) Utilities::write_rgb(75, 0, 130);
-  else Utilities::write_rgb(75, 0, 80, true);
+  else Utilities::write_rgb(75, 0, 80);
   alarm_adv_counter_set();
   return 0;
 }
@@ -315,7 +318,7 @@ static void handle_phone_connected_work(struct k_work* work_item) {
   // TODO decrease timeout
   while (strlen(command_char_val) < 7 && phone_conn && k_uptime_get() < start_time + 20000LL) {
     printk(".");
-    k_msleep(20);
+    k_msleep(100);
   }
   if (!phone_conn) return;
   if (!strlen(command_char_val)) {
@@ -354,6 +357,10 @@ static void connected(struct bt_conn* conn, uint8_t err) {
   }
 
   printk("\n>>> BLE Connected to %s -- MAC: %s\n", is_sensor ? "SENSOR" : "PHONE", addr);
+
+  if (!bt_bas_set_battery_level(battery_read().percent)) {
+    printk("Unable to write battery level char\n");
+  }
 
   alarm_adv_counter_cancel();
   if (is_sensor) {
@@ -410,7 +417,7 @@ int init_ble(NetworkRequests* network_requests) {
   network_reqs = network_requests;
   int err = bt_enable(NULL);
   if (IS_ENABLED(CONFIG_TEST)) k_msleep(100);
-  if (err != 0) {
+  if (err) {
     printk("Bluetooth init failed (err %d)\n", err);
     return err;
   } else printk("\tBLE enabled\n");
@@ -418,10 +425,10 @@ int init_ble(NetworkRequests* network_requests) {
   err = scan_init();
   if (err) {
     printk("BLE scan init failed (err %d)\n", err);
-  } else printk("\tBLE scan initialized");
+  } else printk("\tBLE scan initialized\n");
 
   err = alarm_init(&advertise_start, &adv_led_interval_cb);
-  if (err != 0) {
+  if (err) {
     printk("Error during alarm_init\n");
   }
   return err;
