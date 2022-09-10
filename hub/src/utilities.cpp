@@ -75,20 +75,21 @@ namespace Utilities {
     return res;
   }
 
-  cJSON* cJSON_GetNested(cJSON* parent, const char* const path[]) {
-    if (!parent) return NULL;
-    uint16_t path_len = sizeof(path) / sizeof(path[0]);
-    printk("Searching for path of len %u in json response...\n", path_len);
-    cJSON* temp_obj = NULL;
-    for (int i = 0; i < path_len; i++) {
-      temp_obj = cJSON_GetObjectItemCaseSensitive(temp_obj, path[i]);
-      if (!temp_obj) {
-        printk("\tUnable to find: %s\n", path[i]);
-        return NULL;
-      } else {
-        printk("\tFound #%d temp_obj.name: %s\n", i, temp_obj->string);
-      }
-    }
-    return temp_obj;
-  }
+  // TODO fix
+  // cJSON* cJSON_GetNested(cJSON* parent, const char* const path[]) {
+  //   if (!parent) return NULL;
+  //   uint16_t path_len = sizeof(path) / sizeof(path[0]);
+  //   printk("Searching for path of len %u in json response...\n", path_len);
+  //   cJSON* temp_obj = NULL;
+  //   for (int i = 0; i < path_len; i++) {
+  //     temp_obj = cJSON_GetObjectItemCaseSensitive(temp_obj, path[i]);
+  //     if (!temp_obj) {
+  //       printk("\tUnable to find: %s\n", path[i]);
+  //       return NULL;
+  //     } else {
+  //       printk("\tFound #%d temp_obj.name: %s\n", i, temp_obj->string);
+  //     }
+  //   }
+  //   return temp_obj;
+  // }
 }

@@ -9,8 +9,7 @@
 #include "network.h"
 #include "location.h"
 #include "ble.h"
-
-const uint16_t VERSION = 1;
+#include "version.h"
 
 Network network;
 Location location;
@@ -19,7 +18,7 @@ NetworkRequests network_requests;
 void main(void)
 {
   int64_t boot_time = k_uptime_get();
-  printk("############### Sketch version %d ###############\n", VERSION);
+  printk("############### Sketch version %s ###############\n", VERSION);
   printk("Booting...\n");
   printk("Board: %s\n", CONFIG_BOARD);
   Utilities::setup_pins();
@@ -102,8 +101,6 @@ void main(void)
   start_scan();
 
   while (1) {
-
-    // TODO OTA DFU
 
     if (battery_should_send_update()) {
       battery_update();

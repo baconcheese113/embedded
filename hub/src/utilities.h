@@ -43,7 +43,7 @@ namespace Utilities {
    * @param path an array of JSON object names to search through
    * @return A pointer to the found cJSON object or NULL
   */
-  cJSON* cJSON_GetNested(cJSON* parent, const char* const path[]);
+  // cJSON* cJSON_GetNested(cJSON* parent, const char* const path[]);
 }
 
 #endif

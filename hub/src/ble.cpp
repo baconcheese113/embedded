@@ -7,6 +7,12 @@
 #include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/sys/printk.h>
 
+// DFU OTA
+#include <mgmt/mcumgr/smp_bt.h>
+#include <os_mgmt/os_mgmt.h>
+#include <img_mgmt/img_mgmt.h>
+#include "version.h"
+
 #include "ble.h"
 #include "battery.h"
 #include "alarm.h"
@@ -20,46 +26,31 @@
 
 #define ADV_DURATION_MS		30 * 1000
 
-// 1000181a-0000-1000-8000-00805f9b34fb
 #define BT_UUID_SENSOR_SERVICE_VAL  BT_UUID_128_ENCODE(0x1000181a, 0x0000, 0x1000, 0x8000, 0x00805f9b34fb)
-// 10002A58-0000-1000-8000-00805f9b34fb
 #define BT_UUID_VOLT_CHAR_VAL       BT_UUID_128_ENCODE(0x10002A58, 0x0000, 0x1000, 0x8000, 0x00805f9b34fb)
-
-// TODO Use battery service provided by nordic
-// const char* BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb";
-// const char* BATTERY_LEVEL_CHARACTERISTIC_UUID = "00002a19-0000-1000-8000-00805f9b34fb";
-
-// 0000181a-0000-1000-8000-00805f9b34fc
 #define BT_UUID_HUB_SERVICE_VAL      BT_UUID_128_ENCODE(0x0000181a, 0x0000, 0x1000, 0x8000, 0x00805f9b34fc)
+
 static struct bt_uuid_128 hub_svc_uuid = BT_UUID_INIT_128(BT_UUID_HUB_SERVICE_VAL);
-
-// 00002A58-0000-1000-8000-00805f9b34fd
-static struct bt_uuid_128 command_char_uuid = BT_UUID_INIT_128(
-  BT_UUID_128_ENCODE(0x00002A58, 0x0000, 0x1000, 0x8000, 0x00805f9b34fd));
-
-// static struct bt_uuid_128 vnd_enc_uuid = BT_UUID_INIT_128(
-//   BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x56789abcdef1));
-// 00002A58-0000-1000-8000-00805f9b34fe
-#define BT_UUID_TRANSFER_CHAR_VAL    BT_UUID_128_ENCODE(0x00002A58, 0x0000, 0x1000, 0x8000, 0x00805f9b34fe)
-// TODO Use OTA DFU service
-// const char* FIRMWARE_CHARACTERISTIC_UUID = "2A26";
+static struct bt_uuid_128 command_char_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x00002A58, 0x0000, 0x1000, 0x8000, 0x00805f9b34fd));
+#define FIRMWARE_VERSION_CHAR   BT_UUID_DIS_FIRMWARE_REVISION
 
 struct k_work work;
 
+// Don't change these during discovery!
 static char command_char_val[30];
+static char version[] = VERSION;
 
 static int cur_id = 0;
 static ssize_t read_command_char(struct bt_conn* conn, const struct bt_gatt_attr* attr,
   void* buf, uint16_t len, uint16_t offset)
 {
   const char* value = (const char*)attr->user_data;
-  printk("Read attempt\n");
+  printk("Read command attempt\n");
 
   // TODO remove
   snprintk(command_char_val, 10, "UserId:%d", cur_id++);
 
-  return bt_gatt_attr_read(conn, attr, buf, len, offset, value,
-    strlen(value));
+  return bt_gatt_attr_read(conn, attr, buf, len, offset, value, strlen(value));
 }
 
 static ssize_t write_command_char(struct bt_conn* conn, const struct bt_gatt_attr* attr,
@@ -75,17 +66,29 @@ static ssize_t write_command_char(struct bt_conn* conn, const struct bt_gatt_att
   memcpy(value + offset, buf, len);
   value[offset + len] = 0;
 
-  printk("\nWrite attempt: %s and %s\n", (char*)value, (char*)buf);
+  printk("\nWrite command attempt: %s and %s\n", (char*)value, (char*)buf);
 
   return len;
 }
-/* Vendor Primary Service Declaration */
+static ssize_t read_version_char(struct bt_conn* conn, const struct bt_gatt_attr* attr,
+  void* buf, uint16_t len, uint16_t offset)
+{
+  const char* value = (const char*)attr->user_data;
+  printk("Read version attempt and version: %s\n", value);
+
+  return bt_gatt_attr_read(conn, attr, buf, len, offset, value, strlen(value));
+}
+
 BT_GATT_SERVICE_DEFINE(hub_svc,
   BT_GATT_PRIMARY_SERVICE(&hub_svc_uuid),
   BT_GATT_CHARACTERISTIC(&command_char_uuid.uuid,
     BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
     BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
     read_command_char, write_command_char, command_char_val),
+  BT_GATT_CHARACTERISTIC(FIRMWARE_VERSION_CHAR,
+    BT_GATT_CHRC_READ,
+    BT_GATT_PERM_READ,
+    read_version_char, NULL, version),
   );
 
 static const struct bt_data ad[] = {
@@ -311,8 +314,10 @@ static void handle_sensor_connected_work(struct k_work* work_item) {
 }
 
 static void handle_phone_connected_work(struct k_work* work_item) {
+  if (bt_bas_set_battery_level(battery_read().percent)) {
+    printk("Unable to write battery level char\n");
+  }
   // Grab access_token from userId of connected phone
-  memset(command_char_val, 0, sizeof(command_char_val));
   int64_t start_time = k_uptime_get();
   printk("Trying to read userid...");
   // TODO decrease timeout
@@ -358,11 +363,6 @@ static void connected(struct bt_conn* conn, uint8_t err) {
 
   printk("\n>>> BLE Connected to %s -- MAC: %s\n", is_sensor ? "SENSOR" : "PHONE", addr);
 
-  if (!bt_bas_set_battery_level(battery_read().percent)) {
-    printk("Unable to write battery level char\n");
-  }
-
-  alarm_adv_counter_cancel();
   if (is_sensor) {
     advertise_stop();
     k_work_init(&work, handle_sensor_connected_work);
@@ -377,6 +377,7 @@ static void connected(struct bt_conn* conn, uint8_t err) {
     k_work_init(&work, handle_phone_connected_work);
     k_work_submit(&work);
   }
+  alarm_adv_counter_cancel();
 }
 
 static void disconnected(struct bt_conn* conn, uint8_t reason) {
@@ -426,6 +427,12 @@ int init_ble(NetworkRequests* network_requests) {
   if (err) {
     printk("BLE scan init failed (err %d)\n", err);
   } else printk("\tBLE scan initialized\n");
+
+
+  // DFU OTA
+  os_mgmt_register_group();
+  img_mgmt_register_group();
+  smp_bt_register();
 
   err = alarm_init(&advertise_start, &adv_led_interval_cb);
   if (err) {
