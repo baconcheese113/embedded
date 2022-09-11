@@ -9,8 +9,9 @@
 #include "token_settings.h"
 #include "utilities.h"
 #include "serial.h"
-// #include "conf.cpp"
-const char* API_URL = "http://ptsv2.com/t/7ahpc-1662517472/post";
+#include "conf.cpp"
+
+#define MAX_NETWORK_ATTEMPTS    2
 
 uint8_t AT_SAPBR_IDX = 0;
 uint8_t AT_HTTPDATA_IDX = 6;
@@ -51,7 +52,7 @@ bool Network::has_token() {
 cJSON* Network::send_request(char* query) {
   Utilities::write_rgb(0, 0, 60);
   // leave off line break to catch mistakes
-  printk("Sending request:\n%s", query);
+  printk("Sending request:\n%s\nOf size: %d\n", query, strlen(query));
 
   serial_purge();
   size_t command_size = 55 + strlen(token_data.access_token);
@@ -92,11 +93,10 @@ cJSON* Network::send_request(char* query) {
   cJSON* doc;
 
   printk("Commands to iterate through: %u\n", commands_len);
-  for (uint8_t attempt = 0; attempt < 3; attempt++) {
+  for (uint8_t attempt = 0; attempt < MAX_NETWORK_ATTEMPTS; attempt++) {
+    serial_purge();
     memset(buffer, 0, RESPONSE_SIZE);
     for (uint8_t i = 0; i < commands_len; i++) {
-      serial_purge();
-      k_msleep(20);
       serial_print_uart(commands[i]);
       bool success = false;
 
@@ -105,19 +105,15 @@ cJSON* Network::send_request(char* query) {
         // DOWNLOAD
         // OK
         // TODO gather the confidence to break on this failure
-        if (serial_did_return_str("DOWNLOAD", 1000LL)) {
-          // printk("DOWNLOAD received\n");
+        if (!serial_did_return_str("DOWNLOAD", 1000LL)) {
+          printk("DOWNLOAD failed\n");
         }
         // receive NO CARRIER response without waiting this amount
         // TODO maybe remove Utilities::bleDelay(900, BLE); 
-        k_msleep(500);
-        // printk("Awake\n");
-        serial_print_uart(query);
-        // printk("Printed query\n");
         k_msleep(100);
-        // printk("Napped\n");
+        serial_print_uart(query);
+        k_msleep(100);
         success = serial_did_return_ok(5000LL);
-        // printk("Success is %i\n", success);
       } else if (i == AT_HTTPACTION_IDX) {
         // AT+HTTPACTION=1
         // OK
@@ -149,7 +145,7 @@ cJSON* Network::send_request(char* query) {
     doc = cJSON_ParseWithOpts(buffer, &error_msg, true);
     if (strlen(error_msg) || !doc) {
       printk("parseWithOpts() failed: %s\n", error_msg);
-      if (attempt < 2) {
+      if (attempt < MAX_NETWORK_ATTEMPTS - 1) {
         printk("Retrying. Attempt %d\n", attempt + 2);
       } else {
         printk("All attempts failed\n");
@@ -198,7 +194,6 @@ bool Network::get_imei() {
 
   if (buf[0] >= '0' && buf[0] <= '9') {
     strncpy(device_imei, buf, sizeof(device_imei));
-    device_imei[strlen(buf)] = '\0';
   } else return false;
   if (!serial_did_return_ok(500LL)) {
     memset(device_imei, 0, sizeof(device_imei));

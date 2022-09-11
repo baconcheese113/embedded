@@ -2,6 +2,7 @@
 #define HUB_BLE_H
 
 #include "network_requests.h"
+#include "network.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -12,7 +13,12 @@ extern "C" {
   extern uint8_t known_sensor_addrs_len;
 
   // Enables Bluetooth, must be called before any other ble functions
-  int init_ble(NetworkRequests* network_requests);
+  int init_ble(NetworkRequests* network_requests, Network* network);
+
+  /**
+   * @return True if ble is advertising or has a connection
+   */
+  bool ble_is_busy();
 
   /** Starts advertising
    * @return 0 on success

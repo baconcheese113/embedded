@@ -5,6 +5,9 @@
 extern "C" {
 #endif
 
+  // If the ble button is currently pressed
+  extern bool was_pressed;
+
   /**
    * @brief Setup button GPIO configuration and initialize alarms
    * @param button_hold_cb Pointer to callback which will be called when button

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define MSG_SIZE 128
+#define MSG_SIZE 256
 
 #ifdef __cplusplus
 extern "C" {

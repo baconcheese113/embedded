@@ -30,8 +30,11 @@ static void serial_cb(const struct device* dev, void* user_data)
     uart_fifo_read(uart1_dev, &c, 1);
     bool is_break = c == '\n' || c == '\r';
 
-    if (is_break && rx_buf_pos > 0) {
-      /* terminate string */
+    if (rx_buf_pos == 0 && is_break) continue;
+
+    if (!is_break) rx_buf[rx_buf_pos++] = c;
+
+    if ((rx_buf_pos == sizeof(rx_buf) - 1) || is_break) {
       rx_buf[rx_buf_pos] = '\0';
 
       /* if queue is full, message is silently dropped */
@@ -39,13 +42,6 @@ static void serial_cb(const struct device* dev, void* user_data)
 
       /* reset the buffer (it was copied to the msgq) */
       rx_buf_pos = 0;
-    } else if (!is_break) {
-      if (rx_buf_pos < (sizeof(rx_buf) - 1)) {
-        rx_buf[rx_buf_pos++] = c;
-      } else {
-        /* else: characters beyond buffer size are dropped */
-        printk("ERROR: Buffer length exceeded\n");
-      }
     }
   }
 }

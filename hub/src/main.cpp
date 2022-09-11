@@ -15,6 +15,24 @@ Network network;
 Location location;
 NetworkRequests network_requests;
 
+static k_work_delayable work;
+struct k_work_q periodic_work_q;
+K_THREAD_STACK_DEFINE(periodic_stack_area, 2048);
+
+static void handle_loop_work(struct k_work* work_item) {
+  if (network.has_token() && !ble_is_busy()) {
+    printk("⏰  [%lld] Checking if background work is scheduled...", k_uptime_get());
+    if (battery_should_send_update()) {
+      battery_update();
+    } else if (location.should_send_update()) {
+      location.send_update();
+    }
+    printk("\tBackground work complete\n");
+  }
+
+  k_work_schedule(&work, K_SECONDS(10));
+}
+
 void main(void)
 {
   int64_t boot_time = k_uptime_get();
@@ -35,6 +53,15 @@ void main(void)
   }
   printk("\t✔️   SIM peripherals ready\n");
 
+  network_requests.init(&network);
+  location.init(&network, &network_requests);
+
+  // TODO battery init should store battery level when modem off
+  printk("Initializing Battery functionality...\n");
+  if (battery_init(&network_requests)) {
+    printk("Battery init failed\n");
+  } else printk("\tBattery reading starting from %dmV\n", battery_read().real_mV);
+
   network.set_power(true);
 
   while (!network.wait_for_power_on()) {
@@ -54,16 +81,10 @@ void main(void)
   }
   printk("\t✔️  SIM module setup complete\n");
 
-  network_requests.init(&network);
-  location.init(&network, &network_requests);
 
-  printk("Initializing Battery functionality...\n");
-  if (battery_init(&network_requests)) {
-    printk("Battery init failed\n");
-  } else printk("\tBattery reading starting from %dmV\n", battery_read().real_mV);
 
   printk("Intializing BLE peripheral, RTC, and button driven interrupts...\n");
-  if (init_ble(&network_requests) == 0) {
+  if (init_ble(&network_requests, &network) == 0) {
     printk("\t✔️  BLE, RTC, and IRQs ready\n");
   } else return;
 
@@ -75,8 +96,6 @@ void main(void)
     char sensor_query[] = "{\"query\":\"query getMySensors{hubViewer{sensors{serial}}}\",\"variables\":{}}\r";
     cJSON* doc = network.send_request(sensor_query);
     cJSON* sensors = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "hubViewer"), "sensors");
-    // const char* const path[] = { "data", "hubViewer", "sensors" };
-    // cJSON* sensors = Utilities::cJSON_GetNested(doc, path);
     if (cJSON_GetArraySize(sensors)) {
       cJSON* sensor;
       printk("Array size is %d\n", cJSON_GetArraySize(sensors));
@@ -100,15 +119,6 @@ void main(void)
   k_msleep(2000);
   start_scan();
 
-  while (1) {
-
-    if (battery_should_send_update()) {
-      battery_update();
-    }
-    if (location.should_send_update()) {
-      location.send_update();
-    }
-
-    k_msleep(10 * 1000);
-  }
+  k_work_init_delayable(&work, handle_loop_work);
+  k_work_schedule(&work, K_SECONDS(10));
 }

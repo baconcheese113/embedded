@@ -19,10 +19,11 @@ public:
   /**
    * @brief Callback for when a phone is trying to register this hub
   * @param user_id the user id sent from the phone during connection
+  * @param hub_addr the MAC of the hub to be used by the phone to find the hub
   * @param out_hub_id a pointer to the location to store the hub_id on success
   * @return 0 on success, -1 if failed to send
   */
-  int handle_get_token_and_hub_id(char* user_id, uint16_t* out_hub_id);
+  int handle_get_token_and_hub_id(char* user_id, char* hub_addr, uint16_t* out_hub_id);
   /**
    * @brief Callback for when an event should be sent
    * @param sensor_addr MAC address of sensor responsible for event

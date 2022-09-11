@@ -18,12 +18,14 @@
 #include "alarm.h"
 #include "utilities.h"
 #include "network_requests.h"
+#include "network.h"
 
 #define DEVICE_NAME			  CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN		(sizeof(DEVICE_NAME) - 1)
 
 #define PERIPHERAL_NAME	"HandleIt Client"
 
+#define BLE_COOLDOWN_MS   30 * 1000
 #define ADV_DURATION_MS		30 * 1000
 
 #define BT_UUID_SENSOR_SERVICE_VAL  BT_UUID_128_ENCODE(0x1000181a, 0x0000, 0x1000, 0x8000, 0x00805f9b34fb)
@@ -35,20 +37,71 @@ static struct bt_uuid_128 command_char_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCOD
 #define FIRMWARE_VERSION_CHAR   BT_UUID_DIS_FIRMWARE_REVISION
 
 struct k_work work;
+struct k_work_q ble_work_q;
+K_THREAD_STACK_DEFINE(ble_stack_area, 2048);
 
 // Don't change these during discovery!
 static char command_char_val[30];
 static char version[] = VERSION;
 
-static int cur_id = 0;
+#define MAC_ADDR_LEN      18
+char hub_mac[MAC_ADDR_LEN];
+
+const char* COMMAND_START_SENSOR_SEARCH = "StartSensorSearch";
+const char* COMMAND_SENSOR_CONNECT = "SensorConnect";
+
+static struct bt_conn* phone_conn;
+static struct bt_conn* sensor_conn;
+
+// Have to declare here to avoid "taking address of temporary array" error
+const struct bt_le_adv_param* adv_param = BT_LE_ADV_CONN;
+const struct bt_le_scan_param* scan_param = BT_LE_SCAN_ACTIVE;
+const struct bt_conn_le_create_param* create_param = BT_CONN_LE_CREATE_CONN;
+const struct bt_le_conn_param* conn_param = BT_LE_CONN_PARAM_DEFAULT;
+
+static NetworkRequests* network_reqs;
+static Network* network;
+
+int64_t adv_start_time;
+int64_t last_event_time;
+bool is_adding_new_sensor = false;
+bool is_making_network_request = false;
+
+// 10 available address slots
+char known_sensor_addrs[10][50];
+uint8_t known_sensor_addrs_len;
+
+static void handle_sensor_search_work(struct k_work* work_item) {
+  printk("handling sensor search work\n");
+  is_adding_new_sensor = true;
+  start_scan();
+}
+
+static void handle_add_sensor_work(struct k_work* work_item) {
+  printk("handling add sensor work\n");
+  char addr[MAC_ADDR_LEN];
+  bt_addr_le_to_str(bt_conn_get_dst(sensor_conn), addr, sizeof(addr));
+  addr[MAC_ADDR_LEN - 1] = '\0';
+
+  is_making_network_request = true;
+  int err = network_reqs->handle_add_new_sensor(addr);
+  is_making_network_request = false;
+  if (err) {
+    printk("Unable to add sensor\n");
+  }
+  if (phone_conn) {
+    // TODO Use notify
+    strcpy(command_char_val, "SensorAdded:1");
+  }
+  add_known_sensor(addr);
+  bt_conn_disconnect(sensor_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+}
+
 static ssize_t read_command_char(struct bt_conn* conn, const struct bt_gatt_attr* attr,
   void* buf, uint16_t len, uint16_t offset)
 {
   const char* value = (const char*)attr->user_data;
-  printk("Read command attempt\n");
-
-  // TODO remove
-  snprintk(command_char_val, 10, "UserId:%d", cur_id++);
+  printk("Read command attempt and it's %s\n", command_char_val);
 
   return bt_gatt_attr_read(conn, attr, buf, len, offset, value, strlen(value));
 }
@@ -66,7 +119,17 @@ static ssize_t write_command_char(struct bt_conn* conn, const struct bt_gatt_att
   memcpy(value + offset, buf, len);
   value[offset + len] = 0;
 
-  printk("\nWrite command attempt: %s and %s\n", (char*)value, (char*)buf);
+  printk("\nWrite command attempt: %s\n", (char*)value);
+  if (strlen((char*)value)) {
+    Command command = Utilities::parse_raw_command((char*)value);
+    if (strcmp(command.type, COMMAND_START_SENSOR_SEARCH) == 0) {
+      k_work_init(&work, handle_sensor_search_work);
+      k_work_submit_to_queue(&ble_work_q, &work);
+    } else if (strcmp(command.type, COMMAND_SENSOR_CONNECT) == 0) {
+      k_work_init(&work, handle_add_sensor_work);
+      k_work_submit_to_queue(&ble_work_q, &work);
+    }
+  }
 
   return len;
 }
@@ -82,9 +145,10 @@ static ssize_t read_version_char(struct bt_conn* conn, const struct bt_gatt_attr
 BT_GATT_SERVICE_DEFINE(hub_svc,
   BT_GATT_PRIMARY_SERVICE(&hub_svc_uuid),
   BT_GATT_CHARACTERISTIC(&command_char_uuid.uuid,
-    BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+    BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
     BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
     read_command_char, write_command_char, command_char_val),
+  BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
   BT_GATT_CHARACTERISTIC(FIRMWARE_VERSION_CHAR,
     BT_GATT_CHRC_READ,
     BT_GATT_PERM_READ,
@@ -100,28 +164,10 @@ static const struct bt_data sd[] = {
 BT_DATA_BYTES(BT_DATA_UUID128_SOME, BT_UUID_HUB_SERVICE_VAL),
 };
 
-static struct bt_conn* phone_conn;
-static struct bt_conn* sensor_conn;
 
-struct work_info {
-  struct k_work work;
-  char name[25];
-} ble_work;
-
-// Have to declare here to avoid "taking address of temporary array" error
-const struct bt_le_adv_param* adv_param = BT_LE_ADV_CONN;
-const struct bt_le_scan_param* scan_param = BT_LE_SCAN_ACTIVE;
-const struct bt_conn_le_create_param* create_param = BT_CONN_LE_CREATE_CONN;
-const struct bt_le_conn_param* conn_param = BT_LE_CONN_PARAM_DEFAULT;
-
-static NetworkRequests* network_reqs;
-
-int64_t adv_start_time;
-bool is_adding_new_sensor = false;
-
-// 10 available address slots
-char known_sensor_addrs[10][50];
-uint8_t known_sensor_addrs_len;
+bool ble_is_busy() {
+  return adv_start_time > 0 || phone_conn || sensor_conn || last_event_time > 0 || was_pressed;
+}
 
 int advertise_start(void) {
   if (adv_start_time > 0) {
@@ -139,6 +185,7 @@ int advertise_start(void) {
     printk("Error starting to advertise (err %d)\n", err);
     return err;
   }
+  network->set_power(true);
   adv_start_time = k_uptime_get();
   alarm_adv_counter_set();
   return 0;
@@ -153,7 +200,10 @@ int advertise_stop(void) {
   printk("Stopped advertising after %lld seconds\n", (k_uptime_get() - adv_start_time) / 1000);
   adv_start_time = 0;
   Utilities::write_rgb(0, 0, 0);
-  if (!phone_conn && !sensor_conn) start_scan();
+  if (!phone_conn && !sensor_conn) {
+    start_scan();
+    network->set_power(false);
+  }
   return 0;
 }
 
@@ -171,10 +221,16 @@ int adv_led_interval_cb(void) {
 
 
 void scan_match(struct bt_scan_device_info* device_info, struct bt_scan_filter_match* filter_match, bool connectable) {
+  if (last_event_time && k_uptime_get() < last_event_time + BLE_COOLDOWN_MS) {
+    printk("-");
+    return;
+  } else last_event_time = 0;
+
   const bt_addr_le_t* addr_le = device_info->recv_info->addr;
   // TODO only get MAC, not full string
-  char addr_str[BT_ADDR_LE_STR_LEN];
+  char addr_str[MAC_ADDR_LEN];
   bt_addr_le_to_str(addr_le, addr_str, sizeof(addr_str));
+  addr_str[MAC_ADDR_LEN - 1] = '\0';
   printk("\t\t\t📱 Scanned MAC: %s, rssi: %d, connectable: %d\n",
     addr_str, device_info->recv_info->rssi, connectable);
 
@@ -213,7 +269,6 @@ void scan_match(struct bt_scan_device_info* device_info, struct bt_scan_filter_m
     printk("Error stopping BLE scan (err %d)\n", err);
     return;
   }
-  // TODO only connect under certain conditions
   err = bt_conn_le_create(addr_le, create_param, conn_param, &sensor_conn);
   if (err) {
     Utilities::write_rgb(255, 0, 0);
@@ -263,10 +318,6 @@ static int scan_init(void) {
   return 0;
 }
 
-void register_event() {
-  // TODO stop scanning until cooldown complete and start advertising
-}
-
 void start_scan(void)
 {
   int err;
@@ -280,14 +331,17 @@ void start_scan(void)
 }
 
 static void handle_sensor_connected_work(struct k_work* work_item) {
-  char addr[BT_ADDR_LE_STR_LEN];
+  char addr[MAC_ADDR_LEN];
   bt_addr_le_to_str(bt_conn_get_dst(sensor_conn), addr, sizeof(addr));
+  addr[MAC_ADDR_LEN - 1] = '\0';
   Utilities::write_rgb(255, 100, 200);
   printk("\nPeripheral connected!\n");
   // TODO print information about ATT
 
   if (!is_adding_new_sensor) {
+    is_making_network_request = true;
     int err = network_reqs->handle_send_event(addr);
+    is_making_network_request = false;
     if (err) {
       printk("Unable to send event\n");
       bt_conn_disconnect(sensor_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
@@ -295,25 +349,11 @@ static void handle_sensor_connected_work(struct k_work* work_item) {
     }
     bt_conn_disconnect(sensor_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
     advertise_start();
-    printk("Cooling down to prevent peripheral reconnection---\n");
-    // TODO handle cooldown
-    // lastEventTime = epochMillis();
-    // lastScanTime = lastEventTime + BLE_COOLDOWN;
-  } else {
-    int err = network_reqs->handle_add_new_sensor(addr);
-    if (err) {
-      printk("Unable to add sensor\n");
-    }
-    add_known_sensor(addr);
-    bt_conn_disconnect(sensor_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
-    if (phone_conn) {
-      // TODO Use notify
-      strcpy(command_char_val, "SensorAdded:1");
-    }
   }
 }
 
 static void handle_phone_connected_work(struct k_work* work_item) {
+  printk("handling phone connection work\n");
   if (bt_bas_set_battery_level(battery_read().percent)) {
     printk("Unable to write battery level char\n");
   }
@@ -334,22 +374,35 @@ static void handle_phone_connected_work(struct k_work* work_item) {
 
   Command command = Utilities::parse_raw_command(command_char_val);
   if (strcmp(command.type, "UserId") != 0) {
-    printk("Error: command.type is not equal to UserId, command.type: %s", command.type);
+    printk("Error: command.type is not equal to UserId, command.type: %s\n", command.type);
     bt_conn_disconnect(phone_conn, BT_HCI_ERR_UNACCEPT_CONN_PARAM);
     return;
   }
-  printk("command.type is UserId");
+  printk("command.type is UserId\n");
 
   uint16_t hub_id;
-  int err = network_reqs->handle_get_token_and_hub_id(command.value, &hub_id);
+  is_making_network_request = true;
+  int err = network_reqs->handle_get_token_and_hub_id(command.value, hub_mac, &hub_id);
+  is_making_network_request = false;
   if (err) {
     printk("Unable to get token and hub_id\n");
+    return;
+  }
+  if (phone_conn) {
+    snprintk(command_char_val, 10, "HubId:%d", hub_id++);
+    printk("Changed command_char_val to %s\n", command_char_val);
+    // TODO Use notify to the command char
+    // err = bt_gatt_notify(NULL, &hub_svc.attrs[0], &command_char_val, sizeof(command_char_val));
+    // if (err) {
+    //   printk("Failed to notify (err 0x%x)\n", err);
+    // }
   }
 }
 
 static void connected(struct bt_conn* conn, uint8_t err) {
-  char addr[BT_ADDR_LE_STR_LEN];
+  char addr[MAC_ADDR_LEN];
   bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+  addr[MAC_ADDR_LEN - 1] = '\0';
   bool is_sensor = sensor_conn && sensor_conn == conn;
   if (err) {
     printk("Failed to connect to %s (err %u)\n", addr, err);
@@ -366,7 +419,7 @@ static void connected(struct bt_conn* conn, uint8_t err) {
   if (is_sensor) {
     advertise_stop();
     k_work_init(&work, handle_sensor_connected_work);
-    k_work_submit(&work);
+    k_work_submit_to_queue(&ble_work_q, &work);
   } else {
     phone_conn = bt_conn_ref(conn);
     advertise_stop();
@@ -374,19 +427,25 @@ static void connected(struct bt_conn* conn, uint8_t err) {
     if (err) {
       printk("Failed to stop scan\n");
     }
-    k_work_init(&work, handle_phone_connected_work);
-    k_work_submit(&work);
+    if (!network->has_token()) {
+      k_work_init(&work, handle_phone_connected_work);
+      err = k_work_submit_to_queue(&ble_work_q, &work);
+      if (err < 0) {
+        printk("Failed to submit to queue (err 0x%x)\n", err);
+      }
+    }
   }
   alarm_adv_counter_cancel();
 }
 
 static void disconnected(struct bt_conn* conn, uint8_t reason) {
-  char addr[BT_ADDR_LE_STR_LEN];
+  char addr[MAC_ADDR_LEN];
   if (conn != sensor_conn && conn != phone_conn) {
-
     return;
   }
+  if (!(sensor_conn && phone_conn) && !is_making_network_request) network->set_power(false);
   bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+  addr[MAC_ADDR_LEN - 1] = '\0';
   bool is_sensor = sensor_conn && sensor_conn == conn;
   printk("\n>>> BLE Disconnecting from %s -- MAC: %s (reason 0x%02x)\n", is_sensor ? "SENSOR" : "PHONE", addr, reason);
 
@@ -394,11 +453,14 @@ static void disconnected(struct bt_conn* conn, uint8_t reason) {
     Utilities::write_rgb(0, 0, 0);
     bt_conn_unref(sensor_conn);
     sensor_conn = NULL;
+    last_event_time = k_uptime_get();
+    printk("Cooling down to prevent peripheral reconnection---");
   } else {
     bt_conn_unref(phone_conn);
     phone_conn = NULL;
     is_adding_new_sensor = false;
     memset(command_char_val, 0, sizeof(command_char_val));
+    if (sensor_conn) bt_conn_disconnect(sensor_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
   }
   if (!phone_conn) start_scan();
 }
@@ -414,8 +476,9 @@ void add_known_sensor(char* addr) {
   known_sensor_addrs_len++;
 }
 
-int init_ble(NetworkRequests* network_requests) {
+int init_ble(NetworkRequests* network_requests, Network* net) {
   network_reqs = network_requests;
+  network = net;
   int err = bt_enable(NULL);
   if (IS_ENABLED(CONFIG_TEST)) k_msleep(100);
   if (err) {
@@ -428,6 +491,17 @@ int init_ble(NetworkRequests* network_requests) {
     printk("BLE scan init failed (err %d)\n", err);
   } else printk("\tBLE scan initialized\n");
 
+  // Set hub MAC address
+  size_t size = 1;
+  bt_addr_le_t addrs[size];
+  bt_id_get(addrs, &size);
+  bt_addr_le_to_str(&addrs[0], hub_mac, sizeof(hub_mac));
+  hub_mac[MAC_ADDR_LEN - 1] = '\0';
+  printk("\tHub MAC initialized as (%s)\n", hub_mac);
+
+  k_work_queue_start(&ble_work_q, ble_stack_area,
+    K_THREAD_STACK_SIZEOF(ble_stack_area),
+    CONFIG_SYSTEM_WORKQUEUE_PRIORITY + 1, NULL);
 
   // DFU OTA
   os_mgmt_register_group();

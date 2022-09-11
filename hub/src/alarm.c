@@ -23,7 +23,7 @@ static const struct gpio_dt_spec button = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios)
 static struct gpio_callback button_cb_data;
 
 static bool adv_alarm_running = false;
-static bool was_pressed = false;
+bool was_pressed = false;
 
 typedef int (*callback_ptr_t)(void);
 struct work_info {
