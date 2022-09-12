@@ -11,6 +11,12 @@
 #include "ble.h"
 #include "version.h"
 
+// UART over USB
+#include <zephyr/usb/usb_device.h>
+#include <zephyr/drivers/uart.h>
+BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart),
+  "Console device is not ACM CDC UART device");
+
 Network network;
 Location location;
 NetworkRequests network_requests;
@@ -24,6 +30,8 @@ static void handle_loop_work(struct k_work* work_item) {
     printk("⏰  [%lld] Checking if background work is scheduled...", k_uptime_get());
     if (battery_should_send_update()) {
       battery_update();
+    } else if (location.should_warm_up()) {
+      location.start_warm_up();
     } else if (location.should_send_update()) {
       location.send_update();
     }
@@ -35,6 +43,19 @@ static void handle_loop_work(struct k_work* work_item) {
 
 void main(void)
 {
+  // UART over USB
+  const struct device* dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+  uint32_t dtr = 0;
+  if (usb_enable(NULL)) {
+    return;
+  }
+  /* Poll if the DTR flag was set */
+  while (!dtr) {
+    uart_line_ctrl_get(dev, UART_LINE_CTRL_DTR, &dtr);
+    /* Give CPU resources to low priority threads. */
+    k_sleep(K_MSEC(100));
+  }
+
   int64_t boot_time = k_uptime_get();
   printk("############### Sketch version %s ###############\n", VERSION);
   printk("Booting...\n");
@@ -81,8 +102,6 @@ void main(void)
   }
   printk("\t✔️  SIM module setup complete\n");
 
-
-
   printk("Intializing BLE peripheral, RTC, and button driven interrupts...\n");
   if (init_ble(&network_requests, &network) == 0) {
     printk("\t✔️  BLE, RTC, and IRQs ready\n");
@@ -119,6 +138,9 @@ void main(void)
   k_msleep(2000);
   start_scan();
 
+  k_work_queue_start(&periodic_work_q, periodic_stack_area,
+    K_THREAD_STACK_SIZEOF(periodic_stack_area),
+    CONFIG_SYSTEM_WORKQUEUE_PRIORITY + 2, NULL);
   k_work_init_delayable(&work, handle_loop_work);
   k_work_schedule(&work, K_SECONDS(10));
 }

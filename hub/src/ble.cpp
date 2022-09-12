@@ -88,12 +88,13 @@ static void handle_add_sensor_work(struct k_work* work_item) {
   is_making_network_request = false;
   if (err) {
     printk("Unable to add sensor\n");
+  } else {
+    add_known_sensor(addr);
+    if (phone_conn) {
+      // TODO Use notify
+      strcpy(command_char_val, "SensorAdded:1");
+    }
   }
-  if (phone_conn) {
-    // TODO Use notify
-    strcpy(command_char_val, "SensorAdded:1");
-  }
-  add_known_sensor(addr);
   bt_conn_disconnect(sensor_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 }
 
@@ -227,7 +228,6 @@ void scan_match(struct bt_scan_device_info* device_info, struct bt_scan_filter_m
   } else last_event_time = 0;
 
   const bt_addr_le_t* addr_le = device_info->recv_info->addr;
-  // TODO only get MAC, not full string
   char addr_str[MAC_ADDR_LEN];
   bt_addr_le_to_str(addr_le, addr_str, sizeof(addr_str));
   addr_str[MAC_ADDR_LEN - 1] = '\0';

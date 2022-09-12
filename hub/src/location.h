@@ -34,15 +34,18 @@ private:
    */
   void turn_off(const char* msg);
 
-public:
   // The last time (in millis) that location was queried
   unsigned long last_gps_time = 0;
+
+  // If greater than 0, a warm up was kicked off at this ms time
+  int64_t warm_up_start_time = 0;
 
   // The last sent LocReading sent to the server
   LocReading last_sent_reading;
 
   // If the GPS module is powered on (should be off on init)
   bool is_powered = false;
+public:
 
   static void print_loc_reading(LocReading reading);
 
@@ -75,6 +78,19 @@ public:
    * send_update() should be called
    */
   bool should_send_update();
+
+  /**
+   * @return true if GPS_INTERVAL has passed since last update and
+   * haven't already started warming up
+   */
+  bool should_warm_up();
+
+  /**
+   * @brief Starts warm up process of turning on modem, should_send_update
+   * should be polled until send_update can be called
+   * @return 0 on success, -1 for any failure starting modem
+   */
+  int start_warm_up();
 
   /**
    * @brief Blocks while warming up the modem and reading location

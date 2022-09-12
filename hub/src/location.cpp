@@ -81,8 +81,12 @@ void Location::init(Network* net, NetworkRequests* network_requests) {
   network_reqs = network_requests;
 }
 
+bool Location::should_warm_up() {
+  return !warm_up_start_time && (last_gps_time == 0 || k_uptime_get() > last_gps_time + GPS_UPDATE_INTERVAL);
+}
+
 bool Location::should_send_update() {
-  return last_gps_time == 0 || k_uptime_get() > last_gps_time + GPS_UPDATE_INTERVAL;
+  return !last_gps_time && (warm_up_start_time && k_uptime_get() > warm_up_start_time + GPS_BUFFER_TIME);
 }
 
 void Location::turn_off(const char* msg) {
@@ -92,15 +96,29 @@ void Location::turn_off(const char* msg) {
   network->set_power(false);
 }
 
-int Location::send_update() {
+int Location::start_warm_up() {
   // warm up the module
   Utilities::write_rgb(235, 30, 180);
   network->set_power(true);
-  network->wait_for_power_on();
-  set_gps_power(true);
-  k_msleep(GPS_BUFFER_TIME);
+  if (!network->wait_for_power_on()) {
+    turn_off("Error: Network didn't start\n");
+    return -1;
+  } else if (!set_gps_power(true)) {
+    turn_off("Error: Unable to turn on gps\n");
+    return -1;
+  }
+  warm_up_start_time = k_uptime_get();
+  return 0;
+}
+
+int Location::send_update() {
+  warm_up_start_time = 0;
   Utilities::write_rgb(120, 10, 50);
 
+  if (!network->is_powered_on()) {
+    turn_off("Modem isn't powered, aborting\n");
+    return -1;
+  }
   // module is warmed up
   last_gps_time = k_uptime_get();
   serial_print_uart("AT+CGNSINF\r");

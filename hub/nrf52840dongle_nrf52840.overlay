@@ -78,12 +78,17 @@
         };
     };
 };
-red_pwm_led: &red_pwm_led {
-    pwms = <&pwm0 0 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+
+// For UART over USB
+/ {
+	chosen {
+		zephyr,console = &cdc_acm_uart0;
+	};
 };
-green_pwm_led: &green_pwm_led {
-    pwms = <&pwm0 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
-};
-blue_pwm_led: &blue_pwm_led {
-    pwms = <&pwm0 2 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+
+&zephyr_udc0 {
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+		label = "CDC_ACM_0";
+	};
 };
