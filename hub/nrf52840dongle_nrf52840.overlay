@@ -19,8 +19,8 @@
 // gpio0    20  uart0 tx
 // gpio0    22  uart0 cts
 // gpio0    24  uart0 rx
-// gpio1    0   +uart1 rx
-// gpio0    9
+// gpio1    0
+// gpio0    9	+uart1 rx
 // gpio0    10  +uart1 tx
 // GND
 
@@ -29,7 +29,7 @@
 // gpio1    13  spi1 miso
 // gpio1    15  +mosfet_sim
 // gpio0    2
-// gpio0    29
+// gpio0    29	+ain5
 // gpio0    31  spi1 sck
 // GND
 // VDD OUT
@@ -52,7 +52,7 @@
 &pinctrl {
     uart1_default: uart1_default {
 		group1 {
-			psels = <NRF_PSEL(UART_RX, 1, 0)>;
+			psels = <NRF_PSEL(UART_RX, 0, 9)>;
 			bias-pull-up;
 		};
 		group2 {
@@ -62,7 +62,7 @@
 
 	uart1_sleep: uart1_sleep {
 		group1 {
-			psels = <NRF_PSEL(UART_RX, 1, 0)>,
+			psels = <NRF_PSEL(UART_RX, 0, 9)>,
 				<NRF_PSEL(UART_TX, 0, 10)>;
 			low-power-enable;
 		};

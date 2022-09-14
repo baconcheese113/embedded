@@ -21,7 +21,7 @@ static const int BATT_RANGE = BATT_MAX_MV - BATT_MIN_MV;
 // Channels are pre-mapped to pins, 2 is AIN2
 // https://infocenter.nordicsemi.com/topic/ps_nrf52840/pin.html?cp=4_0_0_6_0_0#aqfn73
 // https://infocenter.nordicsemi.com/topic/ug_nrf52840_dk/UG/dk/hw_analog_pins.html
-#define ADC_CHANNEL_ID        2
+#define ADC_CHANNEL_ID        5
 
 static const struct device* adc_dev = DEVICE_DT_GET(DT_NODELABEL(adc));
 
