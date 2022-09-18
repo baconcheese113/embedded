@@ -109,7 +109,7 @@ int NetworkRequests::handle_update_battery_level(int real_mV, uint8_t percent) {
   if (network->set_power_on_and_wait_for_reg()) {
     size_t len = 150;
     char mutation[150];
-    snprintk(mutation, len, "{\"query\":\"mutation UpdateHubBatteryLevel{updateHubBatteryLevel(volts:%.2f, percent:%d){ id }}\",\"variables\":{}}\r", (float)real_mV / 1000.0, percent);
+    snprintk(mutation, len, "{\"query\":\"mutation UpdateHubBatteryLevel{updateHubBatteryLevel(volts:%.5f, percent:%d){ id }}\",\"variables\":{}}\r", (float)real_mV / 1000.0, percent);
     cJSON* doc = network->send_request(mutation);
     cJSON* id = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "updateHubBatteryLevel"), "id");
     if (id) {

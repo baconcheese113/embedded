@@ -86,7 +86,7 @@ bool Location::should_warm_up() {
 }
 
 bool Location::should_send_update() {
-  return !last_gps_time && (warm_up_start_time && k_uptime_get() > warm_up_start_time + GPS_BUFFER_TIME);
+  return !last_gps_time || (warm_up_start_time && k_uptime_get() > warm_up_start_time + GPS_BUFFER_TIME);
 }
 
 void Location::turn_off(const char* msg) {

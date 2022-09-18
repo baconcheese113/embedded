@@ -12,10 +12,12 @@
 #include "version.h"
 
 // UART over USB
+#ifdef CONFIG_UART_LINE_CTRL
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/drivers/uart.h>
 BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_CHOSEN(zephyr_console), zephyr_cdc_acm_uart),
   "Console device is not ACM CDC UART device");
+#endif
 
 Network network;
 Location location;
@@ -44,6 +46,7 @@ static void handle_loop_work(struct k_work* work_item) {
 void main(void)
 {
   // UART over USB
+#ifdef CONFIG_UART_LINE_CTRL
   const struct device* dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
   uint32_t dtr = 0;
   if (usb_enable(NULL)) {
@@ -55,6 +58,7 @@ void main(void)
     /* Give CPU resources to low priority threads. */
     k_sleep(K_MSEC(100));
   }
+#endif
 
   int64_t boot_time = k_uptime_get();
   printk("############### Sketch version %s ###############\n", VERSION);

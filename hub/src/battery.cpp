@@ -18,7 +18,7 @@
 static const int BATT_RANGE = BATT_MAX_MV - BATT_MIN_MV;
 #define ADC_REFERENCE         ADC_REF_INTERNAL
 #define ADC_ACQUISITION_TIME  ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 10)
-// Channels are pre-mapped to pins, 2 is AIN2
+// Channels are pre-mapped to pins, 5 is AIN5
 // https://infocenter.nordicsemi.com/topic/ps_nrf52840/pin.html?cp=4_0_0_6_0_0#aqfn73
 // https://infocenter.nordicsemi.com/topic/ug_nrf52840_dk/UG/dk/hw_analog_pins.html
 #define ADC_CHANNEL_ID        5
@@ -31,8 +31,9 @@ static const struct adc_channel_cfg channel_cfg = {
   .acquisition_time = ADC_ACQUISITION_TIME,
   .channel_id = ADC_CHANNEL_ID,
   #if defined(CONFIG_ADC_CONFIGURABLE_INPUTS)
-    .input_positive = NRF_SAADC_INPUT_AIN2,
-  #endif
+  // This dictates which pin to use
+  .input_positive = NRF_SAADC_INPUT_AIN5,
+#endif
 };
 
 static int16_t m_sample_buffer[1];
