@@ -1,0 +1,16 @@
+# Ignore generated files
+build
+build_*
+build-*
+
+# Ignore meta data
+.dir
+.vscode
+
+# Only get workspace folders that we care about (hub/sensor)
+/*
+!.gitignore
+!hub/
+
+# Env vars
+conf.*
