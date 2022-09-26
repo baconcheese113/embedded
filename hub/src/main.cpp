@@ -43,14 +43,14 @@ static void handle_loop_work(struct k_work* work_item) {
   k_work_schedule(&work, K_SECONDS(10));
 }
 
-void main(void)
+int main(void)
 {
   // UART over USB
 #ifdef CONFIG_UART_LINE_CTRL
   const struct device* dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
   uint32_t dtr = 0;
   if (usb_enable(NULL)) {
-    return;
+    return 1;
   }
   /* Poll if the DTR flag was set */
   if (!dtr) {
@@ -74,7 +74,7 @@ void main(void)
   printk("Checking for peripheral connections to SIM module...\n");
   if (network.init() != 0) {
     printk("\tSIM module failed to initialize\n");
-    return;
+    return 1;
   }
   printk("\t✔️   SIM peripherals ready\n");
 
@@ -109,7 +109,7 @@ void main(void)
   printk("Intializing BLE peripheral, RTC, and button driven interrupts...\n");
   if (init_ble(&network_requests, &network) == 0) {
     printk("\t✔️  BLE, RTC, and IRQs ready\n");
-  } else return;
+  } else return 1;
 
   printk("Checking peristent storage for saved configs...\n");
   network.initialize_access_token();
@@ -147,4 +147,6 @@ void main(void)
     CONFIG_SYSTEM_WORKQUEUE_PRIORITY + 2, NULL);
   k_work_init_delayable(&work, handle_loop_work);
   k_work_schedule(&work, K_SECONDS(10));
+
+  return 0;
 }

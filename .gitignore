@@ -6,6 +6,7 @@ build-*
 # Ignore meta data
 .dir
 .vscode
+.DS_Store
 
 # Only get workspace folders that we care about (hub/sensor)
 /*

@@ -29,6 +29,10 @@ pwm0_sleep: &pwm0_sleep {
 };
 
 uart1: &arduino_serial{};
+// Not sure why this is required, but it genrates the nodelabels correctly on mac
+rtc2: &rtc2 {
+    label = "rtc2";
+};
 / {
     mosfets {
         compatible = "gpio-keys";
