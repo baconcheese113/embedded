@@ -46,6 +46,14 @@ static char version[] = VERSION;
 
 #define MAC_ADDR_LEN      18
 char hub_mac[MAC_ADDR_LEN];
+/**
+ *  Weird hack to support iOS devices
+ * Storing MAC in Manufacturer data so iOS can read it
+ * First 2 bytes are mock company ID, then 6 bytes of mac address
+ */
+#define MANU_ID_LEN           2
+#define MANU_DATA_LEN         BT_ADDR_SIZE + MANU_ID_LEN
+static uint8_t hub_mac_bytes[MANU_DATA_LEN] = {0, 0};
 
 const char* COMMAND_START_SENSOR_SEARCH = "StartSensorSearch";
 const char* COMMAND_SENSOR_CONNECT = "SensorConnect";
@@ -161,8 +169,13 @@ static const struct bt_data ad[] = {
   BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
 };
 
-static const struct bt_data sd[] = {
-BT_DATA_BYTES(BT_DATA_UUID128_SOME, BT_UUID_HUB_SERVICE_VAL),
+static struct bt_data sd[] = {
+  BT_DATA_BYTES(BT_DATA_UUID128_SOME, BT_UUID_HUB_SERVICE_VAL),
+  {
+    .type = BT_DATA_MANUFACTURER_DATA,
+    .data_len = MANU_DATA_LEN,
+    .data = hub_mac_bytes,
+  },
 };
 
 
@@ -495,6 +508,11 @@ int init_ble(NetworkRequests* network_requests, Network* net) {
   size_t size = 1;
   bt_addr_le_t addrs[size];
   bt_id_get(addrs, &size);
+  size = sizeof(addrs[0].a.val);
+  // Store bytes backwards to make it easier to read, see declaration for + 2 explanation
+  for(int i = 0; i < (uint8_t)size; i++) {
+    hub_mac_bytes[i + MANU_ID_LEN] = addrs[0].a.val[size - 1 - i];
+  }
   bt_addr_le_to_str(&addrs[0], hub_mac, sizeof(hub_mac));
   hub_mac[MAC_ADDR_LEN - 1] = '\0';
   printk("\tHub MAC initialized as (%s)\n", hub_mac);
