@@ -35,6 +35,10 @@
 // VDD OUT
 // VBUS
 
+// Not sure why this is required, but it genrates the nodelabels correctly on mac
+rtc2: &rtc2 {
+    label = "rtc2";
+};
 &uart0 {
     compatible = "nordic,nrf-uart"; 
     status = "okay";  
