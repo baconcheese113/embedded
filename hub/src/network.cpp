@@ -11,12 +11,10 @@
 #include "serial.h"
 #include "conf.cpp"
 
-#define MAX_NETWORK_ATTEMPTS    2
+#define MAX_NETWORK_ATTEMPTS    1
 
-uint8_t AT_SAPBR_IDX = 0;
-uint8_t AT_HTTPDATA_IDX = 6;
-uint8_t AT_HTTPACTION_IDX = 7;
-uint8_t AT_HTTPREAD_IDX = 8;
+uint8_t AT_CNACT_IDX = 0;
+uint8_t AT_SHREQ_IDX = 18;
 
 
 static const struct gpio_dt_spec mosfet_sim = GPIO_DT_SPEC_GET(DT_NODELABEL(mosfet_sim), gpios);
@@ -35,6 +33,15 @@ int Network::init(void) {
   if (gpio_pin_configure_dt(&mosfet_sim, GPIO_OUTPUT_INACTIVE) == 0) printk("\tMOSFET_SIM pin online\n");
   serial_init();
   return 0;
+}
+
+int Network::unescaped_len(char* str) {
+  int count = 0;
+  for (int idx = 0; idx < (int)strlen(str); idx++) {
+    if (str[idx] == '\\') idx++;
+    count++;
+  }
+  return count;
 }
 
 int Network::initialize_access_token(void) {
@@ -59,80 +66,99 @@ cJSON* Network::send_request(char* query) {
   char auth_command[command_size]{};
   if (token_data.is_valid) {
     snprintk(auth_command, command_size,
-      "AT+HTTPPARA=\"USERDATA\",\"Authorization:Bearer %s\"\r", token_data.access_token);
+      "AT+SHAHEAD=\"authorization\",\"Bearer %s\"\r", token_data.access_token);
   } else {
-    strcpy(auth_command, "AT+HTTPPARA=\"USERDATA\",\"\"\r");
+    strcpy(auth_command, "AT+SHAHEAD=\"authorization\",\"\"\r");
   }
 
-  command_size = 30 + strlen(API_URL);
-  char url_command[30 + strlen(API_URL)]{};
-  snprintk(url_command, command_size, "AT+HTTPPARA=\"URL\",\"%s\"\r", API_URL);
+  command_size = 25 + strlen(API_URL);
+  char sni_command[command_size]{};
+  snprintk(sni_command, command_size, "AT+CSSLCFG=\"sni\",1,\"%s\"\r", API_URL);
 
-  command_size = 30;
-  char len_command[command_size]{};
-  snprintk(len_command, command_size, "AT+HTTPDATA=%d,%d\r", strlen(query), 5000);
+  command_size = 30 + strlen(API_URL);
+  char url_command[command_size]{};
+  snprintk(url_command, command_size, "AT+SHCONF=\"URL\",\"https://%s\"\r", API_URL);
+
+  command_size = 18 + strlen(query);
+  char body_command[command_size]{};
+  snprintk(body_command, command_size, "AT+SHBOD=\"%s\",%d\r", query, unescaped_len(query));
 
   const char* const commands[] = {
-    // "AT+SAPBR=3,1,\"APN\",\"hologram\"",
-    // "AT+SAPBR=3,1,\"Contype\",\"GPRS\"",
-    "AT+SAPBR=1,1\r",
-    "AT+HTTPINIT\r",
-    "AT+HTTPPARA=\"CID\",1\r",
-    auth_command,
+    "AT+CNACT=1,\"hologram\"\r",
+    "AT+CNACT?\r",
+    "AT+CSSLCFG=\"sslversion\",1,3\r",
+    "AT+CSSLCFG=\"ignorertctime\",1,1\r",
+    sni_command,
+    "AT+SHSSL=1,\"\"\r",
+    "AT+SHCONF=\"BODYLEN\",1024\r",
+    "AT+SHCONF=\"HEADERLEN\",350\r",
     url_command,
-    "AT+HTTPPARA=\"CONTENT\",\"application/json\"\r",
-    len_command,
-    "AT+HTTPACTION=1\r",
-    "AT+HTTPREAD\r",
-    "AT+HTTPTERM\r",
-    "AT+SAPBR=0,1\r",
+    "AT+SHCONN\r",
+    "AT+SHCHEAD\r",
+    "AT+SHAHEAD=\"Content-type\",\"application/json\"\r",
+    "AT+SHAHEAD=\"User-Agent\",\"curl/7.47.0\"\r",
+    "AT+SHAHEAD=\"Cache-control\",\"no-cache\"\r",
+    "AT+SHAHEAD=\"Connection\",\"keep-alive\"\r",
+    "AT+SHAHEAD=\"Accept\",\"*/*\"\r",
+    auth_command,
+    body_command,
+    "AT+SHREQ=\"/\",3\r",
+    "AT+SHDISC\r",
   };
 
   uint16_t commands_len = sizeof(commands) / sizeof(*commands);
   const int64_t TIMEOUT = 5000LL;
   cJSON* doc;
 
+
   printk("Commands to iterate through: %u\n", commands_len);
   for (uint8_t attempt = 0; attempt < MAX_NETWORK_ATTEMPTS; attempt++) {
     serial_purge();
     memset(buffer, 0, RESPONSE_SIZE);
+    uint16_t response_len = 0;
     for (uint8_t i = 0; i < commands_len; i++) {
       serial_print_uart(commands[i]);
       bool success = false;
 
-      if (i == AT_HTTPDATA_IDX) {
-        // AT+HTTPDATA=120,5000
-        // DOWNLOAD
+      if (i == AT_CNACT_IDX) {
+        // AT+CNACT=1,"hologram"
         // OK
-        // TODO gather the confidence to break on this failure
-        if (!serial_did_return_str("DOWNLOAD", 1000LL)) {
-          printk("DOWNLOAD failed\n");
+        // +APP PDP:ACTIVE
+        success = serial_did_return_str("+APP PDP:", 15000LL);
+      } else if (i == AT_SHREQ_IDX) {
+        // AT+SHREQ="https://site.com",3
+        // OK
+        // +SHREQ: "POST",200,593
+        if (serial_did_return_ok(TIMEOUT)) {
+          char response[30]{};
+          // This is where we wait for the server response
+          serial_read_queue(response, 15000LL);
+          if (strlen(response) > 19) {
+            response_len = strtoumax(response + 19, NULL, 10);
+            success = true;
+          }
         }
-        // receive NO CARRIER response without waiting this amount
-        // TODO maybe remove Utilities::bleDelay(900, BLE); 
-        k_msleep(100);
-        serial_print_uart(query);
-        k_msleep(100);
-        success = serial_did_return_ok(5000LL);
-      } else if (i == AT_HTTPACTION_IDX) {
-        // AT+HTTPACTION=1
-        // OK
-        // +HTTPACTION: 1,200,27
-        if (!serial_did_return_ok(TIMEOUT)) break;
-        success = serial_did_return_str("+HTTPACTION:", TIMEOUT);
-      } else if (i == AT_HTTPREAD_IDX) {
-        // AT+HTTPREAD
-        // +HTTPREAD: 27
-        // {"data":{"user":{"id":1}}}
-        // OK
-        if (!serial_did_return_str("+HTTPREAD:", TIMEOUT)) break;
-        success = serial_read_raw_until("OK", buffer, TIMEOUT);
+        // Since AT+SHREAD requires the length from previous response, need special case
+        if (success) {
+          success = false;
+          command_size = 30;
+          char read_command[command_size]{};
+          snprintk(read_command, command_size, "AT+SHREAD=0,%d\r", response_len);
+          serial_print_uart(read_command);
+          // AT+SHREAD=0,593
+          // OK
+          // +SHREAD: 593
+          // {"errors":[{"mess
+          if (serial_did_return_str("+SHREAD", TIMEOUT)) {
+            success = serial_read_queue(buffer, TIMEOUT);
+          } else {
+            printk("DOWNLOAD failed\n");
+          }
+        }
       } else {
         // AT+BOOFAR=LEET
         // OK
-        // Long delays possible setting SAPBR with GSM
-        int64_t timeout = i == AT_SAPBR_IDX ? 10000LL : TIMEOUT;
-        success = serial_did_return_ok(timeout);
+        success = serial_did_return_ok(TIMEOUT);
       }
       if (!success) {
         Utilities::write_rgb(70, 5, 0);
@@ -347,31 +373,50 @@ bool Network::set_power_on_and_wait_for_reg(void) {
 // 013 010
 // 079 075 013 010
 
-// https://robu.in/sim800l-interfacing-with-arduino/
-// https://github.com/stephaneAG/SIM800L
-// AT+SAPBR=3,1,"Contype","GPRS"
+// AT+CNACT=1, "hologram"
 // OK
-// AT+SAPBR=1,1
+// +APP PDP:ACTIVE
+// AT+CNACT?
+// +CNACT:1, "xxx.xx.xxx.116"
 // OK
-// AT+HTTPINIT
+// AT+CSSLCFG="sslversion",1,3
 // OK
-// AT+HTTPPARA="CID",1
+// AT+CSSLCFG="ignorertctime",1,1
 // OK
-// AT+HTTPPARA="URL","http://thisshould.behidden.com"
+// AT+CSSLCFG="sni",1,"domain.com"
 // OK
-// AT+HTTPPARA="CONTENT","application/json"
+// AT+SHSSL=1,""
 // OK
-// AT+HTTPDATA=120,5000
-// DOWNLOAD
+// AT+SHCONF="BODYLEN",1024
 // OK
-// AT+HTTPACTION=1
+// AT+SHCONF="HEADERLEN",350
 // OK
-// +HTTPACTION: 1,200,27
-// AT+HTTPREAD
-// +HTTPREAD: 27
-// {"data":{"user":{"id":1}}}
+// AT+SHCONF="URL", "https://httpbin.org"
 // OK
-// AT+HTTPTERM
+// AT+SHCONN
 // OK
-// AT+SAPBR=0,1
+// AT+SHCHEAD
+// OK
+// AT+SHAHEAD="Content-type","application/json"
+// OK
+// AT+SHAHEAD="User-Agent","curl/7.47.0"
+// OK
+// AT+SHAHEAD="Cache-control","no-cache"
+// OK
+// AT+SHAHEAD="Connection","keep-alive"
+// OK
+// AT+SHAHEAD="Accept","*/*"
+// OK
+// AT+SHAHEAD="authorization","Bearer eyJhbGciOiJIUzI1NiJ9ao2918391938-19189283"
+// OK
+// AT+SHBOD="{\"query\":\"query getMySensors{hubViewer{sensors{serial}}}\",\"variables\":{}}",73
+// OK
+// AT+SHREQ="/",3
+// OK
+// +SHREQ: "POST",200,68
+// AT+SHREAD=0,68
+// OK
+// +SHREAD: 68
+// {"data":{"hubViewer":{"sensors":[{"serial":"12:23:34:40:7B:23"}]}}}
+// AT+SHDISC
 // OK

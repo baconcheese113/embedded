@@ -116,7 +116,7 @@ int main(void)
   printk("\t✔️  Persistent storage ready\n");
 
   if (network.has_token() && network.set_power_on_and_wait_for_reg()) {
-    char sensor_query[] = "{\"query\":\"query getMySensors{hubViewer{sensors{serial}}}\",\"variables\":{}}\r";
+    char sensor_query[] = "{\\\"query\\\":\\\"query getMySensors{hubViewer{sensors{serial}}}\\\",\\\"variables\\\":{}}";
     cJSON* doc = network.send_request(sensor_query);
     cJSON* sensors = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "hubViewer"), "sensors");
     if (cJSON_GetArraySize(sensors)) {

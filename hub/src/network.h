@@ -21,6 +21,11 @@ private:
    */
   int8_t last_status = -1;
 
+  /**
+   * @return The length of str after unescaping
+  */
+  int unescaped_len(char* str);
+
 public:
 
   // IMEI number, should be set in main during network setup by calling get_imei()
