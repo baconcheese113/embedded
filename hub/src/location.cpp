@@ -86,7 +86,7 @@ bool Location::should_warm_up() {
 }
 
 bool Location::should_send_update() {
-  return !last_gps_time || (warm_up_start_time && k_uptime_get() > warm_up_start_time + GPS_BUFFER_TIME);
+  return warm_up_start_time > 0;
 }
 
 void Location::turn_off(const char* msg) {
@@ -94,6 +94,7 @@ void Location::turn_off(const char* msg) {
   Utilities::write_rgb(0, 0, 0);
   set_gps_power(false);
   network->set_power(false);
+  warm_up_start_time = 0;
 }
 
 int Location::start_warm_up() {
@@ -112,8 +113,12 @@ int Location::start_warm_up() {
 }
 
 int Location::send_update() {
-  warm_up_start_time = 0;
   Utilities::write_rgb(120, 10, 50);
+
+  if (k_uptime_get() > warm_up_start_time + GPS_BUFFER_TIME) {
+    turn_off("Location check timed out, aborting\n");
+    return -1;
+  }
 
   if (!network->is_powered_on()) {
     turn_off("Modem isn't powered, aborting\n");
@@ -126,7 +131,7 @@ int Location::send_update() {
   char inf_buf[200];
   serial_read_queue(inf_buf, 5000LL);
   if (strlen(inf_buf) < 10) {
-    turn_off("Failed to read inf from SIM module, aborting\n");
+    printk("Failed to read inf from SIM module, aborting\n");
     return -1;
   }
 
@@ -135,7 +140,7 @@ int Location::send_update() {
   LocReading reading = parse_inf(inf_buf);
   printk("\n*****Updating GPS location*****\n");
   if (!reading.hasFix) {
-    turn_off("No GPS fix yet, aborting\n");
+    printk("No GPS fix yet, aborting\n");
     return -1;
   }
   print_loc_reading(reading);
