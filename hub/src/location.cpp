@@ -123,7 +123,7 @@ int Location::send_update() {
   last_gps_time = k_uptime_get();
   serial_print_uart("AT+CGNSINF\r");
   serial_did_return_str("AT+CGNSINF", 5000LL);
-  char inf_buf[50];
+  char inf_buf[200];
   serial_read_queue(inf_buf, 5000LL);
   if (strlen(inf_buf) < 10) {
     turn_off("Failed to read inf from SIM module, aborting\n");
