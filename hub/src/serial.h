@@ -58,6 +58,10 @@ extern "C" {
    */
   bool serial_read_raw_until(const char* str, char* out_buf, int64_t timeout);
 
+  /**
+   * @brief Enters infinite read/write loop to debug SIMCOM modem
+  */
+  bool serial_infinite_io();
 #ifdef __cplusplus
 }
 #endif

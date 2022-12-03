@@ -11,6 +11,8 @@ static uint8_t rx_buf_pos;
 // queue to store up to 10 messages (aligned to 4-byte boundary)
 K_MSGQ_DEFINE(uart_msgq, MSG_SIZE, 10, 4);
 
+static const struct device* uart0_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_shell_uart));
+
 static const struct device* uart1_dev = DEVICE_DT_GET(DT_NODELABEL(uart1));
 
 /*
@@ -118,4 +120,21 @@ bool serial_read_raw_until(const char* str, char* out_buf, int64_t timeout) {
     }
   }
   return false;
+}
+
+bool serial_infinite_io() {
+  char tx_buf[MSG_SIZE]{};
+  unsigned char c;
+  while (1) {
+    while (k_msgq_get(&uart_msgq, &tx_buf, K_NO_WAIT) == 0) {
+      tx_buf[MSG_SIZE - 1] = '\0';
+      printk("Echo: %s\r\n", tx_buf);
+    }
+
+    while (uart_poll_in(uart0_dev, &c) == 0) {
+      printk("%c", c);
+      uart_poll_out(uart1_dev, c);
+    }
+
+  }
 }
