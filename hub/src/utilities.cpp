@@ -1,5 +1,6 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/pwm.h>
+#include <zephyr/kernel.h>
 #include <math.h>
 #include <zephyr/sys/printk.h>
 #include <string.h>

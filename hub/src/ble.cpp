@@ -8,7 +8,7 @@
 #include <zephyr/sys/printk.h>
 
 // DFU OTA
-#include <mgmt/mcumgr/smp_bt.h>
+#include <zephyr/mgmt/mcumgr/smp_bt.h>
 #include <os_mgmt/os_mgmt.h>
 #include <img_mgmt/img_mgmt.h>
 #include "version.h"

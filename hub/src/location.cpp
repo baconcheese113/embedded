@@ -1,4 +1,5 @@
 #include <zephyr/sys/printk.h>
+#include <zephyr/kernel.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>

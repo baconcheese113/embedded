@@ -1,7 +1,7 @@
 #ifndef TOKEN_SETTINGS_H
 #define TOKEN_SETTINGS_H
 
-#include <kernel.h>
+#include <zephyr/kernel.h>
 
 typedef struct {
   char access_token[100];
