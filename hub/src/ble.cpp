@@ -8,9 +8,6 @@
 #include <zephyr/sys/printk.h>
 
 // DFU OTA
-#include <zephyr/mgmt/mcumgr/smp_bt.h>
-#include <os_mgmt/os_mgmt.h>
-#include <img_mgmt/img_mgmt.h>
 #include "version.h"
 
 #include "ble.h"
@@ -520,11 +517,6 @@ int init_ble(NetworkRequests* network_requests, Network* net) {
   k_work_queue_start(&ble_work_q, ble_stack_area,
     K_THREAD_STACK_SIZEOF(ble_stack_area),
     CONFIG_SYSTEM_WORKQUEUE_PRIORITY + 1, NULL);
-
-  // DFU OTA
-  os_mgmt_register_group();
-  img_mgmt_register_group();
-  smp_bt_register();
 
   err = alarm_init(&advertise_start, &adv_led_interval_cb);
   if (err) {
