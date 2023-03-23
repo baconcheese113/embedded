@@ -12,9 +12,9 @@
 #define ADV_DURATION_CHANNEL_ID 1
 
 #ifdef CONFIG_COUNTER_RTC2
-#define TIMER DT_LABEL(DT_NODELABEL(rtc2))
+#define TIMER DEVICE_DT_GET(DT_NODELABEL(rtc2))
 #endif
-static const struct device* counter_dev;
+static const struct device* counter_dev = TIMER;
 
 static struct counter_alarm_cfg button_hold_cfg;
 static struct counter_alarm_cfg adv_timeout_cfg;
@@ -108,12 +108,6 @@ int alarm_init(int (*button_hold_cb)(void), int (*adv_timeout_cb)(void)) {
     return ret;
   }
   printk("\tButton GPIO online\n");
-
-  counter_dev = device_get_binding(TIMER);
-  if (counter_dev == NULL) {
-    printk("Device not found\n");
-    return -1;
-  }
 
   button_hold_cfg.flags = 0;
   button_hold_cfg.ticks = counter_us_to_ticks(counter_dev, HOLD_DELAY);
