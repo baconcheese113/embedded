@@ -16,6 +16,7 @@
 #include "utilities.h"
 #include "network_requests.h"
 #include "network.h"
+#include "diagnostic.h"
 
 #define DEVICE_NAME			  CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN		(sizeof(DEVICE_NAME) - 1)
@@ -486,9 +487,14 @@ void add_known_sensor(char* addr) {
   known_sensor_addrs_len++;
 }
 
+int diagnostic_trigger(void) {
+  return diagnostic_run();
+}
+
 int init_ble(NetworkRequests* network_requests, Network* net) {
   network_reqs = network_requests;
   network = net;
+  diagnostic_init(network_reqs, network);
   int err = bt_enable(NULL);
   if (IS_ENABLED(CONFIG_TEST)) k_msleep(100);
   if (err) {
@@ -518,7 +524,7 @@ int init_ble(NetworkRequests* network_requests, Network* net) {
     K_THREAD_STACK_SIZEOF(ble_stack_area),
     CONFIG_SYSTEM_WORKQUEUE_PRIORITY + 1, NULL);
 
-  err = alarm_init(&advertise_start, &adv_led_interval_cb);
+  err = alarm_init(&advertise_start, &adv_led_interval_cb, &diagnostic_trigger);
   if (err) {
     printk("Error during alarm_init\n");
   }

@@ -107,7 +107,7 @@ cJSON* Network::send_request(char* query) {
   };
 
   uint16_t commands_len = sizeof(commands) / sizeof(*commands);
-  const int64_t TIMEOUT = 5000LL;
+  int64_t timeout = 15000LL;
   cJSON* doc;
 
 
@@ -124,15 +124,15 @@ cJSON* Network::send_request(char* query) {
         // AT+CNACT=1,"hologram"
         // OK
         // +APP PDP:ACTIVE
-        success = serial_did_return_str("+APP PDP:", 15000LL);
+        success = serial_did_return_str("+APP PDP:", timeout);
       } else if (i == AT_SHREQ_IDX) {
         // AT+SHREQ="https://site.com",3
         // OK
         // +SHREQ: "POST",200,593
-        if (serial_did_return_ok(TIMEOUT)) {
+        if (serial_did_return_ok(timeout)) {
           char response[30]{};
           // This is where we wait for the server response
-          serial_read_queue(response, 15000LL);
+          serial_read_queue(response, timeout);
           if (strlen(response) > 19) {
             response_len = strtoumax(response + 19, NULL, 10);
             success = true;
@@ -149,8 +149,8 @@ cJSON* Network::send_request(char* query) {
           // OK
           // +SHREAD: 593
           // {"errors":[{"mess
-          if (serial_did_return_str("+SHREAD", TIMEOUT)) {
-            success = serial_read_queue(buffer, TIMEOUT);
+          if (serial_did_return_str("+SHREAD", timeout)) {
+            success = serial_read_queue(buffer, timeout);
           } else {
             printk("DOWNLOAD failed\n");
           }
@@ -158,11 +158,12 @@ cJSON* Network::send_request(char* query) {
       } else {
         // AT+BOOFAR=LEET
         // OK
-        success = serial_did_return_ok(TIMEOUT);
+        success = serial_did_return_ok(timeout);
       }
       if (!success) {
         Utilities::write_rgb(70, 5, 0);
         printk(">>Network Request Timeout<<\n");
+        timeout = 1000LL;
       }
     }
     printk("Request complete\nResponse is: %s\n", buffer);
@@ -243,7 +244,7 @@ bool Network::wait_for_power_on(void) {
   }
   int64_t startTime = k_uptime_get();
   // Usually takes around 6 seconds from cold boot
-  if (!serial_did_return_str("SMS Ready", 10000LL)) return false;
+  if (!serial_did_return_str("SMS Ready", 20000LL)) return false;
 
   printk("\tPowered On! Took %llims\n", k_uptime_get() - startTime);
   return true;
@@ -348,10 +349,17 @@ bool Network::set_power_on_and_wait_for_reg(void) {
     set_power(false);
     return false;
   }
+
+  serial_print_uart("AT+CNMP?\r");
+  if (!serial_did_return_str("+CNMP: ", 4000LL)) return false;
+
   int8_t regStatus = -1;
   while (k_uptime_get() < start_time + 30000LL) {
     regStatus = get_reg_status();
-    if (regStatus == 5 || regStatus == 1) break;
+    if (regStatus == 5 || regStatus == 1) {
+      printk("\tRegistered!\n");
+      break;
+    }
     k_msleep(50);
   }
   if (regStatus != 5 && regStatus != 1) {
@@ -366,6 +374,69 @@ bool Network::set_power_on_and_wait_for_reg(void) {
   }
   printk("Registered! Total Boot up time(ms): %lld\n", k_uptime_get() - start_time);
   return true;
+}
+
+bool Network::set_preferred_mode(PreferredMode mode) {
+  serial_purge();
+  serial_print_uart("AT+CNMP?\r");
+  if (!serial_did_return_str("+CNMP: ", 4000LL)) return false;
+  // tx_buf should have "+CNMP: 2" or some other mode
+  char command[12]{};
+  snprintk(command, 12, "AT+CNMP=%u\r", (uint8_t) mode);
+  serial_print_uart(command);
+  return serial_did_return_ok(4000LL);
+}
+
+bool Network::send_test_request(void) {
+  serial_purge();
+
+  const char* const commands[] = {
+    "AT+CNACT=1,\"hologram\"\r", // +APP PDP
+    "AT+CNACT?\r",
+    "AT+CSSLCFG=\"sslversion\",1,3\r",
+    "AT+CSSLCFG=\"ignorertctime\",1,1\r",
+    "AT+CSSLCFG=\"sni\",1,\"httpbin.org\"\r",
+    "AT+SHSSL=1,\"\"\r",
+    "AT+SHCONF=\"BODYLEN\",1024\r",
+    "AT+SHCONF=\"HEADERLEN\",350\r",
+    "AT+SHCONF=\"URL\",\"https://httpbin.org\"\r",
+    "AT+SHCONN\r",
+    "AT+SHCHEAD\r",
+    "AT+SHAHEAD=\"User-Agent\",\"curl/7.47.0\"\r",
+    "AT+SHAHEAD=\"Cache-control\",\"no-cache\"\r",
+    "AT+SHAHEAD=\"Connection\",\"keep-alive\"\r",
+    "AT+SHAHEAD=\"Accept\",\"*/*\"\r",
+    "AT+SHREQ=\"/get?user=jack&password=123\", 1\r", // +SHREQ
+    "AT+SHREAD=0,250\r", // +SHREAD
+    "AT+SHDISC\r",
+    "AT+CNACT=0\r"
+  };
+  
+  uint16_t commands_len = sizeof(commands) / sizeof(*commands);
+  int64_t timeout = 15000LL;
+  bool success = false;
+  for (uint8_t i = 0; i < commands_len; i++) {
+    serial_print_uart(commands[i]);
+
+    if(i == 0) {
+      success = serial_did_return_str("+APP PDP", timeout);
+    } else if(i == 15) {
+      success = serial_did_return_str("+SHREQ", timeout);
+    } else if(i == 16) {
+      success = serial_did_return_str("+SHREAD", timeout);
+      k_msleep(50);
+      serial_purge();
+    } else {
+      success = serial_did_return_ok(timeout);
+    }
+
+    if (!success) {
+      Utilities::write_rgb(70, 5, 0);
+      printk(">>Network Request Timeout<<\n");
+      timeout = 1000LL;
+    }
+  }
+  return success;
 }
 // IMEI example
 // 065 084 043 071 083 078 013 013 010 

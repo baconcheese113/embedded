@@ -144,7 +144,7 @@ int main(void)
 
   k_work_queue_start(&periodic_work_q, periodic_stack_area,
     K_THREAD_STACK_SIZEOF(periodic_stack_area),
-    CONFIG_SYSTEM_WORKQUEUE_PRIORITY + 2, NULL);
+    CONFIG_MAIN_THREAD_PRIORITY + 1, NULL);
   k_work_init_delayable(&work, handle_loop_work);
   k_work_schedule(&work, K_SECONDS(10));
 

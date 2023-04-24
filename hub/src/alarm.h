@@ -14,9 +14,11 @@ extern "C" {
    * has been held long enough to start advertising
    * @param adv_timeout_cb Pointer to callback which will be called when advertising
    * exceeds timeout duration
+   * @param diagnostic_trigger_cb Pointer to callback which will be called when diagnostic
+   * mode is triggered (button tapped 4 times)
    * @return 0 on success, other numbers on error
    */
-  int alarm_init(int (*button_hold_cb)(void), int (*adv_timeout_cb)(void));
+  int alarm_init(int (*button_hold_cb)(void), int (*adv_timeout_cb)(void), int (*diagnostic_trigger_cb)(void));
 
   /**
    * @brief Starts the advertising counter, callback set in alarm_init will be called

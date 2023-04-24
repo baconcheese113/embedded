@@ -31,6 +31,9 @@ struct work_info {
   callback_ptr_t callback;
 } cb_work;
 
+static callback_ptr_t default_cb = NULL;
+static callback_ptr_t* multi_tap_cb = &default_cb;
+
 static void cb_work_fn(struct k_work* work_item) {
   struct work_info* button_struct = CONTAINER_OF(work_item, struct work_info, work);
   button_struct->callback();
@@ -46,6 +49,23 @@ void alarm_adv_counter_cancel(void) {
   counter_stop(counter_dev);
   adv_alarm_running = false;
   counter_cancel_channel_alarm(counter_dev, ADV_DURATION_CHANNEL_ID);
+}
+
+static uint8_t diagnostic_trigger_count = 0;
+static int64_t last_trigger_time = 0;
+static void register_press(void) {
+  int64_t ms = k_uptime_get();
+  if (ms - last_trigger_time < 500) {
+    diagnostic_trigger_count++;
+  } else {
+    diagnostic_trigger_count = 1;
+  }
+  last_trigger_time = ms;
+  if (diagnostic_trigger_count == 4) {
+    printk("\n**Diagnostic mode triggered**\n\n");
+    diagnostic_trigger_count = 0;
+    (*multi_tap_cb)();
+  }
 }
 
 static void button_pressed(const struct device* port, struct gpio_callback* cb, gpio_port_pins_t pins) {
@@ -66,6 +86,8 @@ static void button_pressed(const struct device* port, struct gpio_callback* cb, 
     // TODO reset counter somehow
   }
   was_pressed = is_pressed_now;
+
+  if(!is_pressed_now) register_press();
 }
 
 // Internal helper callback that meets the callback function signature
@@ -89,7 +111,7 @@ static void internal_button_hold_cb(const struct device* counter_dev,
   k_work_submit(&cb_work.work);
 }
 
-int alarm_init(int (*button_hold_cb)(void), int (*adv_timeout_cb)(void)) {
+int alarm_init(int (*button_hold_cb)(void), int (*adv_timeout_cb)(void), int (*diagnostic_trigger_cb)(void)) {
   if (!device_is_ready(button.port)) {
     printk("Button not ready\n");
     return -1;
@@ -118,6 +140,8 @@ int alarm_init(int (*button_hold_cb)(void), int (*adv_timeout_cb)(void)) {
   adv_timeout_cfg.ticks = counter_us_to_ticks(counter_dev, ADV_TIMEOUT);
   adv_timeout_cfg.callback = internal_adv_timeout_cb;
   adv_timeout_cfg.user_data = adv_timeout_cb;
+
+  *multi_tap_cb = diagnostic_trigger_cb;
 
   k_work_init(&cb_work.work, cb_work_fn);
 

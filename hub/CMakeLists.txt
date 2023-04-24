@@ -15,4 +15,5 @@ target_sources(app PRIVATE
   src/network_requests.cpp
   src/conf.cpp
   src/battery.cpp
+  src/diagnostic.cpp
 )

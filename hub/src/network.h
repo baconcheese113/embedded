@@ -9,6 +9,13 @@
 // Needs to be large enough for error messages
 const uint16_t RESPONSE_SIZE = 2000;
 
+enum class PreferredMode: uint8_t {
+  AUTOMATIC = 2,
+  GSM = 13,
+  LTE = 38,
+  BOTH = 51,
+};
+
 class Network {
 private:
   /**
@@ -117,6 +124,19 @@ public:
    * Shorthand for calling set_power(true), wait_for_power_on, and get_reg_status until registered
    */
   bool set_power_on_and_wait_for_reg(void);
+
+  /**
+   * @brief Set the current preferred cellular mode of the SIM7000
+   * @param mode The PreferredMode to set
+   * @return True if the mode was set successfully
+   */
+  bool set_preferred_mode(PreferredMode mode);
+
+  /**
+   * @brief Send a test request to the httpbin.org to check if the network is working
+   * @return True if the request was successful
+  */
+  bool send_test_request(void);
 };
 
 #endif
