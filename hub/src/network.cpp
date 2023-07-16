@@ -354,7 +354,7 @@ bool Network::set_power_on_and_wait_for_reg(void) {
   if (!serial_did_return_str("+CNMP: ", 4000LL)) return false;
 
   int8_t regStatus = -1;
-  while (k_uptime_get() < start_time + 30000LL) {
+  while (k_uptime_get() < start_time + 60000LL) {
     regStatus = get_reg_status();
     if (regStatus == 5 || regStatus == 1) {
       printk("\tRegistered!\n");
@@ -363,12 +363,13 @@ bool Network::set_power_on_and_wait_for_reg(void) {
     k_msleep(50);
   }
   if (regStatus != 5 && regStatus != 1) {
-    printk("\tRegStatus not valid\n");
+    printk("\tRegStatus %i not valid\n", regStatus);
     set_power(false);
     return false;
   }
-  if (get_acc_tech() == -1) {
-    printk("\tAccess tech not valid\n");
+  int8_t accTech = get_acc_tech();
+  if (accTech == -1) {
+    printk("\tAccess tech %i not valid\n", accTech);
     set_power(false);
     return false;
   }

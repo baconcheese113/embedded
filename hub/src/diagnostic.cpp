@@ -73,10 +73,17 @@ static void diagnostic_work(struct k_work* work_item) {
   if(fastest_mode == -1) {
     printk("<<<>>> No mode succeeded\n");
   } else {
+    if(!network->is_powered_on()) {
+      printk("<<<>>> Powering on module to set preferred mode...\n");
+      network->set_power(true);
+      network->wait_for_power_on();
+    }
     PreferredMode mode = modes[fastest_mode];
     bool success = network->set_preferred_mode(mode);
     printk("<<<>>> Set fastest mode %u: %s\n", (uint8_t) mode, success ? "success" : "fail");
   }
+
+  network->set_power(false);
 
   printk("**** Diagnostics complete *****\n");
 }

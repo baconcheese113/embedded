@@ -5,6 +5,8 @@
 #include "network_requests.h"
 
 
+#define BATTERY_UPDATE_INTERVAL   12 * 60 * 60 * 1000LL
+
 #ifdef __cplusplus
 extern "C" {
 #endif

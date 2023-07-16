@@ -37,8 +37,6 @@ static const struct adc_channel_cfg channel_cfg = {
 };
 
 static int16_t m_sample_buffer[1];
-
-#define BATTERY_UPDATE_INTERVAL   30 * 60 * 1000LL
 static int64_t battery_last_update;
 static NetworkRequests* network_reqs;
 
