@@ -35,9 +35,8 @@
 // VDD OUT
 // VBUS
 
-// Not sure why this is required, but it genrates the nodelabels correctly on mac
-rtc2: &rtc2 {
-    label = "rtc2";
+&rtc2 {
+	status = "okay";
 };
 &uart0 {
     compatible = "nordic,nrf-uart"; 
@@ -76,9 +75,9 @@ rtc2: &rtc2 {
 / {
     mosfets {
         compatible = "gpio-keys";
+		// Gate for SIM7000
         mosfet_sim: mosfet_0 {
             gpios = <&gpio1 15 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
-            label = "Gate for SIM7000";
         };
     };
 };
@@ -93,6 +92,5 @@ rtc2: &rtc2 {
 &zephyr_udc0 {
 	cdc_acm_uart0: cdc_acm_uart0 {
 		compatible = "zephyr,cdc-acm-uart";
-		label = "CDC_ACM_0";
 	};
 };

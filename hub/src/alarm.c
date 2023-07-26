@@ -3,6 +3,7 @@
 #include <zephyr/drivers/counter.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/kernel.h>
+#include <zephyr/device.h>
 
 #include "alarm.h"
 
@@ -11,10 +12,7 @@
 #define BUTTON_HOLD_CHANNEL_ID 0
 #define ADV_DURATION_CHANNEL_ID 1
 
-#ifdef CONFIG_COUNTER_RTC2
-#define TIMER DEVICE_DT_GET(DT_NODELABEL(rtc2))
-#endif
-static const struct device* counter_dev = TIMER;
+static const struct device* counter_dev = DEVICE_DT_GET(DT_NODELABEL(rtc2));
 
 static struct counter_alarm_cfg button_hold_cfg;
 static struct counter_alarm_cfg adv_timeout_cfg;
@@ -116,6 +114,11 @@ int alarm_init(int (*button_hold_cb)(void), int (*adv_timeout_cb)(void), int (*d
     printk("Button not ready\n");
     return -1;
   }
+  if(!device_is_ready(counter_dev)) {
+    printk("Counter not ready\n");
+    return -1;
+  }
+
   int ret = 0;
   ret |= gpio_pin_configure_dt(&button, GPIO_INPUT);
   ret |= gpio_pin_interrupt_configure_dt(&button, GPIO_INT_EDGE_BOTH);
