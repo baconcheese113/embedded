@@ -52,8 +52,8 @@ int main(void)
   if (usb_enable(NULL)) {
     return 0;
   }
-  /* Poll if the DTR flag was set */
-  while (!dtr) {
+  /* Poll if the DTR flag was set, DO NOT SET TO WHILE or device will wait until console connected */
+  if (!dtr) {
     uart_line_ctrl_get(dev, UART_LINE_CTRL_DTR, &dtr);
     /* Give CPU resources to low priority threads. */
     k_sleep(K_MSEC(100));
