@@ -58,6 +58,13 @@ namespace Utilities {
     write_rgb(0, 0, 0);
   }
 
+  void write_rgb_low_battery() {
+    write_rgb(255, 0, 0);
+    k_msleep(200);
+    write_rgb(0, 0, 0);
+    printk("\t💀 Battery level is too low to continue...\n");
+  }
+
   Command parse_raw_command(char* raw_cmd) {
     printk("in parse_raw_cmd\n");
     Command res;

@@ -10,6 +10,7 @@
 #include "location.h"
 #include "ble.h"
 #include "version.h"
+#include "serial.h"
 
 // UART over USB
 #ifdef CONFIG_UART_LINE_CTRL
@@ -28,11 +29,14 @@ struct k_work_q periodic_work_q;
 K_THREAD_STACK_DEFINE(periodic_stack_area, 2048);
 
 static void handle_loop_work(struct k_work* work_item) {
+  int battery_percent = battery_read().percent;
   if (network.has_token() && !ble_is_busy()) {
-    printk("⏰  [%lld] Checking if background work is scheduled...", k_uptime_get());
-    if (battery_should_send_update()) {
+    printk("⏰  [%lld] Bat: %d%%, Checking if background work is scheduled...", k_uptime_get(), battery_percent);
+    if(battery_percent <= 5) {
+      Utilities::write_rgb_low_battery();
+    } else if (battery_should_send_update()) {
       battery_update();
-    } else if (location.should_warm_up()) {
+    } else if (location.should_warm_up() && battery_percent > 10) {
       location.start_warm_up();
     } else if (location.should_send_update()) {
       location.send_update();
@@ -85,7 +89,13 @@ int main(void)
   printk("Initializing Battery functionality...\n");
   if (battery_init(&network_requests)) {
     printk("Battery init failed\n");
-  } else printk("\tBattery reading starting from %dmV\n", battery_read().real_mV);
+    return 1;
+  }
+  while(battery_read().percent < 5) {
+    Utilities::write_rgb_low_battery();
+    
+    k_msleep(10000);
+  }
 
   network.set_power(true);
 

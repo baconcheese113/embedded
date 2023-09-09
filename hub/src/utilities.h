@@ -24,6 +24,11 @@ namespace Utilities {
 
   /// @brief Watch the LEDs dance and rejoice 
   void happy_dance(void);
+  
+  /**
+   * Writes to the RGB pins the RGB values for low battery
+  */
+  void write_rgb_low_battery();
 
   /**
    * Parses BLE char arrays separated by a colon ( : ) delimeter into a Command struct
