@@ -22,6 +22,8 @@ extern "C" {
     uint8_t percent;
   };
 
+  extern batt_reading_t last_batt_reading;
+
   /**
    * @return Whether we meet the criteria at this moment to send a battery update
    */
@@ -39,6 +41,12 @@ extern "C" {
    * @return 0 on success
    */
   int battery_init(NetworkRequests* network_requests);
+
+  /**
+   * @brief Perform a blocking read to update the cached read {@link last_batt_reading}
+   * this should be done when the battery is being minimally used
+  */
+  void battery_update_cache(void);
 
   /**
    * @brief Perform a blocking read of ADC2 (pin 4) and get results

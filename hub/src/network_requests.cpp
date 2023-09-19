@@ -15,9 +15,11 @@ int NetworkRequests::handle_get_token_and_hub_id(char* user_id, char* hub_addr, 
   if (network->set_power_on_and_wait_for_reg()) {
     size_t len = 200 + strlen(user_id) + strlen(hub_addr) + strlen(network->device_imei);
     char mutation[len];
-    snprintk(mutation, len, "{\\\"query\\\":\\\"mutation loginAsHub{loginAsHub(userId:%s,serial:\\\\\"%s\\\\\",imei:\\\\\"%s\\\\\")}\\\",\\\"variables\\\":{}}", user_id, hub_addr, network->device_imei);
+    snprintk(mutation, len, "{\\\"query\\\":\\\"mutation loginAndFetchHub{loginAndFetchHub(userId:%s,serial:\\\\\"%s\\\\\",imei:\\\\\"%s\\\\\"){hub{id},token}}\\\",\\\"variables\\\":{}}", user_id, hub_addr, network->device_imei);
     cJSON* doc = network->send_request(mutation);
-    cJSON* token = cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "loginAsHub");
+    cJSON* resp = cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "loginAndFetchHub");
+    cJSON* token = cJSON_GetObjectItem(resp, "token");
+    cJSON* id = cJSON_GetObjectItem(cJSON_GetObjectItem(resp, "hub"), "id");
     if (token) {
       const char* token_str = (const char*)(token->valuestring);
       printk("loginAsHub token is: %s\nAnd strlen: %u\n", token_str, strlen(token_str));
@@ -27,29 +29,18 @@ int NetworkRequests::handle_get_token_and_hub_id(char* user_id, char* hub_addr, 
     } else {
       printk("doc->token not valid\n");
     }
+    if(id) {
+      const uint16_t id_int = (const uint16_t)(id->valueint);
+      printk("loginAndFetchHub hub->id: %u\n", id_int);
+      *out_hub_id = id_int;
+      ret = 0;
+    } else {
+      printk("doc->hub->id not\n");
+    }
     cJSON_Delete(doc);
   } else {
     printk("Unable to get network connection\n");
   }
-  // return early if we already failed
-  if (ret) {
-    network->set_power(false);
-    return ret;
-  }
-  printk("Preparing to get HubViewer...\n");
-  ret = -1;
-  char query[] = "{\\\"query\\\":\\\"query getHubViewer{hubViewer{id}}\\\",\\\"variables\\\":{}}";
-  cJSON* doc = network->send_request(query);
-  cJSON* id = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "hubViewer"), "id");
-  if (id) {
-    const uint16_t id_int = (const uint16_t)(id->valueint);
-    printk("getHubViewer id: %u\n", id_int);
-    *out_hub_id = id_int;
-    ret = 0;
-  } else {
-    printk("doc->id not valid\n");
-  }
-  cJSON_Delete(doc);
   network->set_power(false);
   return ret;
 }
@@ -85,7 +76,7 @@ int NetworkRequests::handle_add_new_sensor(char* sensor_addr) {
   if (network->set_power_on_and_wait_for_reg()) {
     size_t len = 155 + strlen(sensor_addr);
     char mutation[len];
-    snprintk(mutation, len, "{\\\"query\\\":\\\"mutation createSensor{createSensor(doorColumn:0,doorRow:0,isOpen:false,isConnected:true,serial:\\\\\"%s\\\\\"){id}}\\\",\\\"variables\\\":{}}", sensor_addr);
+    snprintk(mutation, len, "{\\\"query\\\":\\\"mutation CreateSensor{createSensor(doorColumn:0,doorRow:0,isOpen:false,isConnected:true,serial:\\\\\"%s\\\\\"){id}}\\\",\\\"variables\\\":{}}", sensor_addr);
     cJSON* doc = network->send_request(mutation);
     cJSON* id = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "createSensor"), "id");
     if (id) {
@@ -108,7 +99,7 @@ int NetworkRequests::handle_update_battery_level(int real_mV, uint8_t percent) {
   int ret = -1;
   if (network->set_power_on_and_wait_for_reg()) {
     size_t len = 150;
-    char mutation[150];
+    char mutation[len];
     snprintk(mutation, len, "{\\\"query\\\":\\\"mutation UpdateHubBatteryLevel{updateHubBatteryLevel(volts:%.5f,percent:%d){id}}\\\",\\\"variables\\\":{}}", (float)real_mV / 1000.0, percent);
     cJSON* doc = network->send_request(mutation);
     cJSON* id = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "updateHubBatteryLevel"), "id");
@@ -127,13 +118,13 @@ int NetworkRequests::handle_update_battery_level(int real_mV, uint8_t percent) {
   return ret;
 }
 
-int NetworkRequests::handle_update_gps_loc(float lat, float lng, float hdop, float speed, float course) {
+int NetworkRequests::handle_update_gps_loc(float lat, float lng, float hdop, float speed, float course, int real_mV, uint8_t percent) {
   printk("Preparing to update gps location...\n");
   int ret = -1;
   if (network->set_power_on_and_wait_for_reg()) {
-    size_t len = 150;
-    char mutation[150];
-    snprintk(mutation, len, "{\\\"query\\\":\\\"mutation CreateLocation{createLocation(lat:%.5f,lng:%.5f,hdop:%.2f,speed:%.2f,course:%.2f,age:0){ id }}\\\",\\\"variables\\\":{}}", lat, lng, hdop, speed, course);
+    size_t len = 200;
+    char mutation[len];
+    snprintk(mutation, len, "{\\\"query\\\":\\\"mutation CreateLocation{createLocation(lat:%.5f,lng:%.5f,hdop:%.2f,speed:%.2f,course:%.2f,age:0){ id },updateHubBatteryLevel(volts:%.5f,percent:%d){id}}\\\",\\\"variables\\\":{}}", lat, lng, hdop, speed, course, (float)real_mV / 1000.0, percent);
     cJSON* doc = network->send_request(mutation);
     cJSON* id = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "createLocation"), "id");
     if (id) {

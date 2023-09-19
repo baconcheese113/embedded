@@ -97,7 +97,7 @@ public:
    * then attempts to send it across the network
    * @return 0 on success, -1 for any failures
    */
-  int send_update();
+  int send_update(int real_mV, uint8_t percent);
 
   /**
    * Powers on/off GPS module

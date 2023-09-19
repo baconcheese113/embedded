@@ -49,6 +49,8 @@ const struct adc_sequence sequence = {
   .calibrate = true,
 };
 
+struct batt_reading_t last_batt_reading;
+
 bool battery_should_send_update(void) {
   return battery_last_update == 0 || k_uptime_get() > battery_last_update + BATTERY_UPDATE_INTERVAL;
 }
@@ -80,6 +82,10 @@ int battery_init(NetworkRequests* network_requests) {
     printk("Error in adc setup: %d\n", ret);
   }
   return ret;
+}
+
+void battery_update_cache(void) {
+  last_batt_reading = battery_read();
 }
 
 struct batt_reading_t battery_read(void) {

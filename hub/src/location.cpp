@@ -113,7 +113,7 @@ int Location::start_warm_up() {
   return 0;
 }
 
-int Location::send_update() {
+int Location::send_update(int real_mV, uint8_t percent) {
   Utilities::write_rgb(120, 10, 50);
 
   if (k_uptime_get() > warm_up_start_time + GPS_BUFFER_TIME) {
@@ -152,7 +152,7 @@ int Location::send_update() {
     return -1;
   }
 
-  int err = network_reqs->handle_update_gps_loc(reading.lat, reading.lng, reading.hdop, reading.kmph, reading.deg);
+  int err = network_reqs->handle_update_gps_loc(reading.lat, reading.lng, reading.hdop, reading.kmph, reading.deg, real_mV, percent);
   last_sent_reading = reading;
   if (err) turn_off("Network request to update gps loc failed\n");
   else turn_off("Successfully updated gps location!\n");

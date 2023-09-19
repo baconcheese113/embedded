@@ -52,9 +52,11 @@ public:
    * @param hdop Horizontal Dilution of Precision as [0,99.9]
    * @param speed KM/hour as [0,999.99]
    * @param course Course Over Ground as [0,360.00]
+   * @param real_mV the millivolts of the battery (double the measured millivolts)
+   * @param percent the estimated percentage remaining (0 - 100)
    * @return 0 on success, -1 if failed to send
    */
-  int handle_update_gps_loc(float lat, float lng, float hdop, float speed, float course);
+  int handle_update_gps_loc(float lat, float lng, float hdop, float speed, float course, int real_mV, uint8_t percent);
 };
 
 #endif

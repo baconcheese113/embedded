@@ -14,6 +14,7 @@
 #define MAX_NETWORK_ATTEMPTS    1
 
 uint8_t AT_CNACT_IDX = 0;
+uint8_t AT_SNI_IDX = 4;
 uint8_t AT_SHREQ_IDX = 18;
 
 
@@ -107,7 +108,7 @@ cJSON* Network::send_request(char* query) {
   };
 
   uint16_t commands_len = sizeof(commands) / sizeof(*commands);
-  int64_t timeout = 15000LL;
+  int64_t timeout = 20000LL;
   cJSON* doc;
 
 
@@ -117,6 +118,7 @@ cJSON* Network::send_request(char* query) {
     memset(buffer, 0, RESPONSE_SIZE);
     uint16_t response_len = 0;
     for (uint8_t i = 0; i < commands_len; i++) {
+      if(i == AT_SNI_IDX && !USE_SNI) continue;
       serial_print_uart(commands[i]);
       bool success = false;
 

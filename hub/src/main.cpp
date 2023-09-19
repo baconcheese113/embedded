@@ -29,17 +29,17 @@ struct k_work_q periodic_work_q;
 K_THREAD_STACK_DEFINE(periodic_stack_area, 2048);
 
 static void handle_loop_work(struct k_work* work_item) {
-  int battery_percent = battery_read().percent;
   if (network.has_token() && !ble_is_busy()) {
-    printk("⏰  [%lld] Bat: %d%%, Checking if background work is scheduled...", k_uptime_get(), battery_percent);
-    if(battery_percent <= 5) {
+    printk("⏰  [%lld] Bat: %d%%, Checking if background work is scheduled...", k_uptime_get(), last_batt_reading.percent);
+    if(last_batt_reading.percent <= 5) {
       Utilities::write_rgb_low_battery();
     } else if (battery_should_send_update()) {
       battery_update();
-    } else if (location.should_warm_up() && battery_percent > 10) {
-      location.start_warm_up();
+    } else if (location.should_warm_up()) {
+      battery_update_cache();
+      if(last_batt_reading.percent > 10) location.start_warm_up();
     } else if (location.should_send_update()) {
-      location.send_update();
+      location.send_update(last_batt_reading.real_mV, last_batt_reading.percent);
     }
     printk("\tBackground work complete\n");
   }
@@ -96,6 +96,7 @@ int main(void)
     
     k_msleep(10000);
   }
+  battery_update_cache();
 
   network.set_power(true);
 
