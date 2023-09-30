@@ -9,6 +9,7 @@
 #include "token_settings.h"
 #include "utilities.h"
 #include "serial.h"
+#include "ble.h"
 #include "conf.cpp"
 
 #define MAX_NETWORK_ATTEMPTS    1
@@ -111,7 +112,6 @@ cJSON* Network::send_request(char* query) {
   int64_t timeout = 20000LL;
   cJSON* doc;
 
-
   printk("Commands to iterate through: %u\n", commands_len);
   for (uint8_t attempt = 0; attempt < MAX_NETWORK_ATTEMPTS; attempt++) {
     serial_purge();
@@ -190,11 +190,14 @@ cJSON* Network::send_request(char* query) {
         cJSON* error0 = cJSON_GetArrayItem(errors, 0);
         cJSON* extensions = cJSON_GetObjectItem(error0, "extensions");
         char* code = cJSON_GetObjectItem(extensions, "code")->valuestring;
-        // TODO clear knownSensorAddrs
+
         if (strcmp(code, "UNAUTHENTICATED") == 0) {
           printk("Unauthenticated: Clearing access_token\n");
           set_access_token("");
-          printk("access_token cleared\n");
+          printk("Clearing %u known sensor address(es)\n", known_sensor_addrs_len);
+          memset(known_sensor_addrs, 0, sizeof(known_sensor_addrs));
+          known_sensor_addrs_len = 0;
+          printk("access_token and known_sensor_addrs cleared\n");
         }
         cJSON_Delete(doc);
         return NULL;

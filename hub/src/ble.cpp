@@ -3,7 +3,9 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
+#include <bluetooth/gatt_dm.h>
 #include <bluetooth/scan.h>
+#include <bluetooth/services/bas_client.h>
 #include <zephyr/bluetooth/services/bas.h>
 #include <zephyr/sys/printk.h>
 
@@ -26,8 +28,6 @@
 #define BLE_COOLDOWN_MS   30 * 1000
 #define ADV_DURATION_MS		30 * 1000
 
-#define BT_UUID_SENSOR_SERVICE_VAL  BT_UUID_128_ENCODE(0x1000181a, 0x0000, 0x1000, 0x8000, 0x00805f9b34fb)
-#define BT_UUID_VOLT_CHAR_VAL       BT_UUID_128_ENCODE(0x10002A58, 0x0000, 0x1000, 0x8000, 0x00805f9b34fb)
 #define BT_UUID_HUB_SERVICE_VAL      BT_UUID_128_ENCODE(0x0000181a, 0x0000, 0x1000, 0x8000, 0x00805f9b34fc)
 
 static struct bt_uuid_128 hub_svc_uuid = BT_UUID_INIT_128(BT_UUID_HUB_SERVICE_VAL);
@@ -36,7 +36,10 @@ static struct bt_uuid_128 command_char_uuid = BT_UUID_INIT_128(BT_UUID_128_ENCOD
 
 struct k_work work;
 struct k_work_q ble_work_q;
-K_THREAD_STACK_DEFINE(ble_stack_area, 2048);
+K_THREAD_STACK_DEFINE(ble_stack_area, 4096);
+const k_work_queue_config ble_work_q_config = {
+  .name = "ble_work_q",
+};
 
 // Don't change these during discovery!
 static char command_char_val[30];
@@ -77,6 +80,10 @@ bool is_making_network_request = false;
 char known_sensor_addrs[10][50];
 uint8_t known_sensor_addrs_len;
 
+static struct sensor_details_t sensor_details;
+static uint8_t door_column;
+static uint8_t door_row;
+
 static void handle_sensor_search_work(struct k_work* work_item) {
   printk("handling sensor search work\n");
   is_adding_new_sensor = true;
@@ -90,7 +97,7 @@ static void handle_add_sensor_work(struct k_work* work_item) {
   addr[MAC_ADDR_LEN - 1] = '\0';
 
   is_making_network_request = true;
-  int err = network_reqs->handle_add_new_sensor(addr);
+  int err = network_reqs->handle_add_new_sensor(addr, &sensor_details, door_column, door_row);
   is_making_network_request = false;
   if (err) {
     printk("Unable to add sensor\n");
@@ -114,8 +121,7 @@ static ssize_t read_command_char(struct bt_conn* conn, const struct bt_gatt_attr
 }
 
 static ssize_t write_command_char(struct bt_conn* conn, const struct bt_gatt_attr* attr,
-  const void* buf, uint16_t len, uint16_t offset,
-  uint8_t flags)
+  const void* buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
   uint8_t* value = (uint8_t*)attr->user_data;
 
@@ -133,6 +139,9 @@ static ssize_t write_command_char(struct bt_conn* conn, const struct bt_gatt_att
       k_work_init(&work, handle_sensor_search_work);
       k_work_submit_to_queue(&ble_work_q, &work);
     } else if (strcmp(command.type, COMMAND_SENSOR_CONNECT) == 0) {
+      door_column = command.value[0] - '0';
+      door_row = command.value[1] - '0';
+      printk("Connecting to sensor at door_column %u, door_row %u\n", door_column, door_row);
       k_work_init(&work, handle_add_sensor_work);
       k_work_submit_to_queue(&ble_work_q, &work);
     }
@@ -140,6 +149,7 @@ static ssize_t write_command_char(struct bt_conn* conn, const struct bt_gatt_att
 
   return len;
 }
+
 static ssize_t read_version_char(struct bt_conn* conn, const struct bt_gatt_attr* attr,
   void* buf, uint16_t len, uint16_t offset)
 {
@@ -341,17 +351,191 @@ void start_scan(void)
   printk("Hub scanning for peripheral...\n");
 }
 
+
+static void dis_discovery_completed_cb(struct bt_gatt_dm *dm, void *context);
+static void bas_discovery_completed_cb(struct bt_gatt_dm *dm, void *context);
+
+static const struct bt_gatt_dm_cb bas_discovery_cb = {
+  .completed = bas_discovery_completed_cb,
+};
+
+const bt_gatt_dm_attr *batt_level_char;
+const bt_gatt_dm_attr *batt_volts_char;
+const bt_gatt_dm_attr *software_rev_char;
+static struct bt_uuid_16 battery_svc_uuid = BT_UUID_INIT_16(BT_UUID_BAS_VAL);
+static struct bt_uuid_16 device_info_uuid = BT_UUID_INIT_16(BT_UUID_DIS_VAL);
+
+// 0x2a28 Software Revision String - value:(0x) 30-2E-31-2E-33-00 "0.1.3" recieved - response 02 12 00 28 2a
+static uint8_t read_firmware_version_cb(struct bt_conn *conn, uint8_t err,
+				    struct bt_gatt_read_params *params,
+				    const void *data, uint16_t length)
+{
+  printk("Checking read_firmware_version...\n");
+  if (err) {
+    printk("Error reading firmware version characteristic (err %d)\n", err);
+    return -1;
+  }
+  if (length > 0) {
+    const char* firmware_version = (const char*)data;
+    printk("Firmware version: %s\n", firmware_version); // "0.1.3"
+    strncpy(sensor_details.firmware_version, firmware_version, sizeof(sensor_details.firmware_version));
+  }
+  return 0;
+}
+
+// 0x2a19 Battery Level - value:(0x) 64,"d" ... "100%" recieved - response 02 35 00 18 2b
+static uint8_t read_battery_level_cb(struct bt_conn *conn, uint8_t err,
+				    struct bt_gatt_read_params *params,
+				    const void *data, uint16_t length)
+{
+  printk("Checking read_battery_level...\n");
+  for(int i = 0; i < length; i++) {
+    // print hex values of bytes in data
+    printk("%02x ", ((uint8_t*)data)[i]);
+  }
+  printk("\n");
+  if (err) {
+    printk("Error reading battery level characteristic (err %d)\n", err);
+    return -1;
+  }
+  if (length > 0) {
+    uint8_t battery_level = *(uint8_t*)data;
+    printk("Battery level: %u\n", battery_level);
+    sensor_details.battery_level = battery_level;
+  }
+  return 0;
+}
+
+// 0x2b18 Voltage - "(0x) 0C-E3" recieved
+static uint8_t read_battery_volts_cb(struct bt_conn *conn, uint8_t err,
+				    struct bt_gatt_read_params *params,
+				    const void *data, uint16_t length)
+{
+  printk("Checking read_battery_volts...\n");
+  for(int i = 0; i < length; i++) {
+    // print hex values of bytes in data
+    printk("%02x ", ((uint8_t*)data)[i]);
+  }
+  printk("\n");
+  if (err) {
+    printk("Error reading battery level characteristic (err %d)\n", err);
+    return -1;
+  }
+  if (length > 0) {
+    // Assuming the data is big-endian
+    const uint8_t *raw_data = (const uint8_t *)data;
+    const uint16_t voltage = (raw_data[0] << 8) | raw_data[1];
+    printk("Voltage is %u\n", voltage);
+    sensor_details.battery_volts = voltage;
+  }
+  return 0;
+}
+
+struct bt_uuid *software_rev_uuid = BT_UUID_DIS_SOFTWARE_REVISION;
+struct bt_uuid *batt_volts_uuid = BT_UUID_GATT_V;
+struct bt_uuid *batt_level_uuid = BT_UUID_BAS_BATTERY_LEVEL;
+
+// create params for bt_gatt_read
+struct bt_gatt_read_params batt_level_read_params = {
+  .func = &read_battery_level_cb,
+  .handle_count = 1,
+  .single = { .offset = 0 },
+};
+struct bt_gatt_read_params batt_volts_read_params = {
+  .func = &read_battery_volts_cb,
+  .handle_count = 1,
+  .single = { .offset = 0 },
+};
+struct bt_gatt_read_params software_rev_read_params = {
+  .func = &read_firmware_version_cb,
+  .handle_count = 1,
+  .single = { .offset = 0 },
+};
+
+static void bas_discovery_completed_cb(struct bt_gatt_dm *dm, void *context)
+{
+  printk("Found service 180f - Battery Service UUID\n");
+
+  batt_level_char = bt_gatt_dm_char_by_uuid(dm, batt_level_uuid);
+  batt_volts_char = bt_gatt_dm_char_by_uuid(dm, batt_volts_uuid);
+
+  if(!batt_level_char) {
+    printk("Unable to find BT_UUID_BAS_BATTERY_LEVEL\n");
+    return;
+  }
+  if(!batt_volts_char) {
+    printk("Unable to find BT_UUID_BAS_BATTERY_VOLTAGE\n");
+    return;
+  }
+
+  batt_level_read_params.single.handle = batt_level_char->handle + 1;
+  batt_volts_read_params.single.handle = batt_volts_char->handle + 1;
+
+  if(bt_gatt_read(sensor_conn, &batt_level_read_params)) {
+    printk("Error reading batt_level_char\n");
+  }
+  if(bt_gatt_read(sensor_conn, &batt_volts_read_params)) {
+    printk("Error reading batt_volts_char\n");
+  }
+
+  printk("Releasing DM\n");
+  bt_gatt_dm_data_release(dm);
+  printk("Finished service 0x180f\n");
+
+}
+
+static const struct bt_gatt_dm_cb dis_discovery_cb = {
+  .completed = dis_discovery_completed_cb,
+};
+
+
+static void dis_discovery_completed_cb(struct bt_gatt_dm *dm, void *context)
+{
+  printk("Found service 180a - Device Information Service\n");
+
+  
+  software_rev_char = bt_gatt_dm_char_by_uuid(dm, software_rev_uuid);
+
+  if(!software_rev_char) {
+    printk("Unable to find BT_UUID_DIS_SOFTWARE_REVISION\n");
+    return;
+  }
+  printk("Found software_rev_char...[0x%04X]\n", software_rev_char->handle);
+  software_rev_read_params.single.handle = software_rev_char->handle + 1;
+  
+  if(bt_gatt_read(sensor_conn, &software_rev_read_params)) {
+    printk("Error reading software_rev_char\n");
+  }
+  printk("Releasing DM\n");
+  bt_gatt_dm_data_release(dm);
+  printk("Finished service 0x180a\n");
+
+}
+
 static void handle_sensor_connected_work(struct k_work* work_item) {
   char addr[MAC_ADDR_LEN];
   bt_addr_le_to_str(bt_conn_get_dst(sensor_conn), addr, sizeof(addr));
   addr[MAC_ADDR_LEN - 1] = '\0';
   Utilities::write_rgb(255, 100, 200);
   printk("\nPeripheral connected!\n");
-  // TODO print information about ATT
+  
+  int err;
+  int start_time = k_uptime_get();
+  
+  if ((err = bt_gatt_dm_start(sensor_conn, &device_info_uuid.uuid, &dis_discovery_cb, NULL))) {
+    printk("Could not start the discovery procedure for Device Information Service, error code: %d\n", err);
+  }
+  while(strlen(sensor_details.firmware_version) == 0 && k_uptime_get() < start_time + 5000LL) {
+    printk("Waiting for dis discovery to complete...\n");
+    k_msleep(100);
+  }
+  if ((err = bt_gatt_dm_start(sensor_conn, &battery_svc_uuid.uuid, &bas_discovery_cb, NULL))) {
+    printk("Could not start the discovery procedure for Battery Service, error code: %d\n", err);
+  }
 
   if (!is_adding_new_sensor) {
     is_making_network_request = true;
-    int err = network_reqs->handle_send_event(addr);
+    int err = network_reqs->handle_send_event(addr, &sensor_details);
     is_making_network_request = false;
     if (err) {
       printk("Unable to send event\n");
@@ -522,7 +706,7 @@ int init_ble(NetworkRequests* network_requests, Network* net) {
 
   k_work_queue_start(&ble_work_q, ble_stack_area,
     K_THREAD_STACK_SIZEOF(ble_stack_area),
-    CONFIG_SYSTEM_WORKQUEUE_PRIORITY + 1, NULL);
+    CONFIG_SYSTEM_WORKQUEUE_PRIORITY + 1, &ble_work_q_config);
 
   err = alarm_init(&advertise_start, &adv_led_interval_cb, &diagnostic_trigger);
   if (err) {

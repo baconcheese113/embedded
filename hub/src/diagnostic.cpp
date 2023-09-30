@@ -6,17 +6,22 @@
 static NetworkRequests *network_reqs;
 static Network *network;
 
+bool diagnostic_running = false;
+
 static struct k_work work;
 static struct k_work_q diagnostic_work_q;
 K_THREAD_STACK_DEFINE(diagnostic_stack_area, 2048);
+const k_work_queue_config diagnostic_work_q_config = {
+  .name = "diagnostic_work_q",
+};
 
 void diagnostic_init(NetworkRequests* network_requests, Network* net) {
   network_reqs = network_requests;
   network = net;
-  
+
   k_work_queue_start(&diagnostic_work_q, diagnostic_stack_area,
     K_THREAD_STACK_SIZEOF(diagnostic_stack_area),
-    CONFIG_SYSTEM_WORKQUEUE_PRIORITY + 1, NULL);
+    CONFIG_SYSTEM_WORKQUEUE_PRIORITY + 1, &diagnostic_work_q_config);
 }
 
 static void diagnostic_work(struct k_work* work_item) {
@@ -25,6 +30,7 @@ static void diagnostic_work(struct k_work* work_item) {
     printk("\tNetwork or network requests not initialized\n");
     return;
   }
+  diagnostic_running = true;
 
   PreferredMode modes[] = {
     PreferredMode::AUTOMATIC,
@@ -49,16 +55,21 @@ static void diagnostic_work(struct k_work* work_item) {
       continue;
     }
 
-    bool success = network->set_preferred_mode(mode);
-    printk("<<<>>> Set preferred mode %u: %s\n", (uint8_t) mode, success ? "success" : "fail");
+    if (!network->set_preferred_mode(mode)) {
+      printk("\tSet preferred mode failed\n");
+      continue;
+    }
 
-    if (!success || !network->set_power_on_and_wait_for_reg()) {
+    if (!network->set_power_on_and_wait_for_reg()) {
       printk("\tSet power on and wait failed\n");
       continue;
     }
 
-    success = network->send_test_request();
-    printk("<<<>>> Send test request: %s\n", success ? "success" : "fail");
+    if(!network->send_test_request()) {
+      printk("\tSend test request failed\n");
+      continue;
+    }
+    printk("<<<>>> Send test request success!\n");
     total_time[i] = k_uptime_get() - start_time;
     if(fastest_mode == -1 || total_time[i] < total_time[fastest_mode]) {
       fastest_mode = i;
@@ -86,6 +97,8 @@ static void diagnostic_work(struct k_work* work_item) {
   network->set_power(false);
 
   printk("**** Diagnostics complete *****\n");
+
+  diagnostic_running = false;
 }
 
 int diagnostic_run() {

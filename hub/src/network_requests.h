@@ -3,6 +3,12 @@
 
 #include "network.h"
 
+struct sensor_details_t {
+  uint8_t battery_level;
+  uint16_t battery_volts;
+  char firmware_version[10];
+};
+
 class NetworkRequests
 {
 private:
@@ -27,15 +33,20 @@ public:
   /**
    * @brief Callback for when an event should be sent
    * @param sensor_addr MAC address of sensor responsible for event
+   * @param sensor_details the details of the sensor responsible for the event
    * @return 0 on success, -1 if failed to send
    */
-  int handle_send_event(char* sensor_addr);
+  int handle_send_event(char* sensor_addr, sensor_details_t* sensor_details);
 
   /**
    * @brief Callback for adding new sensor
+   * @param sensor_addr MAC address of sensor to add
+   * @param sensor_details the details of the sensor to add
+   * @param door_column the column of the door the sensor is on
+   * @param door_row the row of the door the sensor is on
    * @return 0 on success, -1 if failed to send
    */
-  int handle_add_new_sensor(char* sensor_addr);
+  int handle_add_new_sensor(char* sensor_addr, sensor_details_t* sensor_details, uint8_t door_column, uint8_t door_row);
 
   /**
    * @brief Callback for notifying the server of the current battery level

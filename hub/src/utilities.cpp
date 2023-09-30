@@ -58,7 +58,7 @@ namespace Utilities {
     write_rgb(0, 0, 0);
   }
 
-  void write_rgb_low_battery() {
+  void write_rgb_low_battery(void) {
     write_rgb(255, 0, 0);
     k_msleep(200);
     write_rgb(0, 0, 0);
@@ -81,6 +81,20 @@ namespace Utilities {
     if (!strlen(res.type)) printk("Error: Couldn't parse type\n");
     if (!strlen(res.value)) printk("Error: Couldn't parse value\n");
     return res;
+  }
+
+  void print_thread_stack_space(void) {  
+    #ifdef CONFIG_THREAD_ANALYZER
+      // Calculate available stack space for the current thread
+      size_t unused_stack;
+      int result = k_thread_stack_space_get(k_current_get(), &unused_stack);
+
+      if (result == 0) {
+        printk("Available stack space for current thread: %u bytes\n", unused_stack);
+      } else {
+        printk("Error: Unable to obtain stack space information. Error code: %d\n", result);
+      }
+    #endif
   }
 
   // TODO fix

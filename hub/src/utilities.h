@@ -28,7 +28,7 @@ namespace Utilities {
   /**
    * Writes to the RGB pins the RGB values for low battery
   */
-  void write_rgb_low_battery();
+  void write_rgb_low_battery(void);
 
   /**
    * Parses BLE char arrays separated by a colon ( : ) delimeter into a Command struct
@@ -41,6 +41,11 @@ namespace Utilities {
    * Returns true if OK received, false otherwise
   **/
   bool readUntilResp(const char* head, char* buffer, uint16_t timeout = 1000);
+
+  /**
+   * @brief Prints the current thread stack space remaining
+  */
+  void print_thread_stack_space(void);
 
   /**
    * @brief Shortcut to parse through n nested objects in a cJSON object

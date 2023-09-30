@@ -148,7 +148,9 @@ int Location::send_update(int real_mV, uint8_t percent) {
 
   double dist = distance_from_last_point(reading.lat, reading.lng);
   if (dist < 20) {
-    turn_off("New location is less than 20m away from previously sent location, aborting\n");
+    char msg[90];
+    snprintk(msg, 90, "New location is less than 20m away from previously sent location (%.1fm), aborting\n", dist);
+    turn_off(msg);
     return -1;
   }
 

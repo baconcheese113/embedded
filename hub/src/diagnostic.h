@@ -9,6 +9,8 @@ extern "C"
 {
 #endif
 
+  extern bool diagnostic_running;
+
   /**
    * @brief Setup pointers needed for network requests
    * @param network_requests Pointer to network requests instance

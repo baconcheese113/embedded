@@ -11,6 +11,7 @@
 #include "ble.h"
 #include "version.h"
 #include "serial.h"
+#include "diagnostic.h"
 
 // UART over USB
 #ifdef CONFIG_UART_LINE_CTRL
@@ -27,9 +28,12 @@ NetworkRequests network_requests;
 static k_work_delayable work;
 struct k_work_q periodic_work_q;
 K_THREAD_STACK_DEFINE(periodic_stack_area, 2048);
+const k_work_queue_config periodic_work_q_config = {
+  .name = "periodic_work_q",
+};
 
 static void handle_loop_work(struct k_work* work_item) {
-  if (network.has_token() && !ble_is_busy()) {
+  if (network.has_token() && !ble_is_busy() && !diagnostic_running) {
     printk("⏰  [%lld] Bat: %d%%, Checking if background work is scheduled...", k_uptime_get(), last_batt_reading.percent);
     if(last_batt_reading.percent <= 5) {
       Utilities::write_rgb_low_battery();
@@ -127,7 +131,7 @@ int main(void)
   printk("\t✔️  Persistent storage ready\n");
 
   if (network.has_token() && network.set_power_on_and_wait_for_reg()) {
-    char sensor_query[] = "{\\\"query\\\":\\\"query getMySensors{hubViewer{sensors{serial}}}\\\",\\\"variables\\\":{}}";
+    char sensor_query[] = "{\\\"query\\\":\\\"query getMySensors{hubViewer{sensors{id,serial}}}\\\",\\\"variables\\\":{}}";
     cJSON* doc = network.send_request(sensor_query);
     cJSON* sensors = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "hubViewer"), "sensors");
     if (cJSON_GetArraySize(sensors)) {
@@ -155,7 +159,7 @@ int main(void)
 
   k_work_queue_start(&periodic_work_q, periodic_stack_area,
     K_THREAD_STACK_SIZEOF(periodic_stack_area),
-    CONFIG_MAIN_THREAD_PRIORITY + 1, NULL);
+    CONFIG_MAIN_THREAD_PRIORITY + 1, &periodic_work_q_config);
   k_work_init_delayable(&work, handle_loop_work);
   k_work_schedule(&work, K_SECONDS(10));
 
