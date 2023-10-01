@@ -175,7 +175,7 @@ cJSON* Network::send_request(char* query, char* out_result_msg) {
     if (strlen(error_msg) || !doc) {
       printk("parseWithOpts() failed: %s\n", error_msg);
       if(out_result_msg) {
-        snprintk(out_result_msg, 200, error_msg);
+        strncpy(out_result_msg, error_msg, 199);
       }
       if (attempt < MAX_NETWORK_ATTEMPTS - 1) {
         printk("Retrying. Attempt %d\n", attempt + 2);
@@ -194,7 +194,7 @@ cJSON* Network::send_request(char* query, char* out_result_msg) {
         cJSON* extensions = cJSON_GetObjectItem(error0, "extensions");
         char* code = cJSON_GetObjectItem(extensions, "code")->valuestring;
         if(out_result_msg) {
-          snprintk(out_result_msg, 200, buffer);
+          strncpy(out_result_msg, buffer, 199);
         }
 
         if (strcmp(code, "UNAUTHENTICATED") == 0) {
