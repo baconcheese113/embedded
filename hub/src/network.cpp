@@ -58,7 +58,7 @@ bool Network::has_token() {
   return token_data.is_valid;
 }
 
-cJSON* Network::send_request(char* query) {
+cJSON* Network::send_request(char* query, char* out_result_msg) {
   Utilities::write_rgb(0, 0, 60);
   // leave off line break to catch mistakes
   printk("Sending request:\n%s\nOf size: %d\n", query, strlen(query));
@@ -174,6 +174,9 @@ cJSON* Network::send_request(char* query) {
     doc = cJSON_ParseWithOpts(buffer, &error_msg, true);
     if (strlen(error_msg) || !doc) {
       printk("parseWithOpts() failed: %s\n", error_msg);
+      if(out_result_msg) {
+        snprintk(out_result_msg, 200, error_msg);
+      }
       if (attempt < MAX_NETWORK_ATTEMPTS - 1) {
         printk("Retrying. Attempt %d\n", attempt + 2);
       } else {
@@ -190,6 +193,9 @@ cJSON* Network::send_request(char* query) {
         cJSON* error0 = cJSON_GetArrayItem(errors, 0);
         cJSON* extensions = cJSON_GetObjectItem(error0, "extensions");
         char* code = cJSON_GetObjectItem(extensions, "code")->valuestring;
+        if(out_result_msg) {
+          snprintk(out_result_msg, 200, buffer);
+        }
 
         if (strcmp(code, "UNAUTHENTICATED") == 0) {
           printk("Unauthenticated: Clearing access_token\n");

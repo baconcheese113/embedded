@@ -27,9 +27,10 @@ public:
   * @param user_id the user id sent from the phone during connection
   * @param hub_addr the MAC of the hub to be used by the phone to find the hub
   * @param out_hub_id a pointer to the location to store the hub_id on success
+  * @param out_result_msg a pointer to the error message returned from the network call if failed
   * @return 0 on success, -1 if failed to send
   */
-  int handle_get_token_and_hub_id(char* user_id, char* hub_addr, uint16_t* out_hub_id);
+  int handle_get_token_and_hub_id(char* user_id, char* hub_addr, uint16_t* out_hub_id, char* out_result_msg);
   /**
    * @brief Callback for when an event should be sent
    * @param sensor_addr MAC address of sensor responsible for event
@@ -44,9 +45,10 @@ public:
    * @param sensor_details the details of the sensor to add
    * @param door_column the column of the door the sensor is on
    * @param door_row the row of the door the sensor is on
+   * @param out_result_msg a pointer to the error message returned from the network call if failed
    * @return 0 on success, -1 if failed to send
    */
-  int handle_add_new_sensor(char* sensor_addr, sensor_details_t* sensor_details, uint8_t door_column, uint8_t door_row);
+  int handle_add_new_sensor(char* sensor_addr, sensor_details_t* sensor_details, uint8_t door_column, uint8_t door_row, char* out_result_msg);
 
   /**
    * @brief Callback for notifying the server of the current battery level

@@ -42,7 +42,7 @@ const k_work_queue_config ble_work_q_config = {
 };
 
 // Don't change these during discovery!
-static char command_char_val[30];
+static char command_char_val[210];
 static char version[] = VERSION;
 
 #define MAC_ADDR_LEN      18
@@ -96,11 +96,14 @@ static void handle_add_sensor_work(struct k_work* work_item) {
   bt_addr_le_to_str(bt_conn_get_dst(sensor_conn), addr, sizeof(addr));
   addr[MAC_ADDR_LEN - 1] = '\0';
 
+  size_t err_size = 210;
+  char err_msg[err_size] = "";
   is_making_network_request = true;
-  int err = network_reqs->handle_add_new_sensor(addr, &sensor_details, door_column, door_row);
+  int err = network_reqs->handle_add_new_sensor(addr, &sensor_details, door_column, door_row, err_msg);
   is_making_network_request = false;
   if (err) {
     printk("Unable to add sensor\n");
+    snprintk(command_char_val, err_size, "Error:%s", err_msg);
   } else {
     add_known_sensor(addr);
     if (phone_conn) {
@@ -576,11 +579,14 @@ static void handle_phone_connected_work(struct k_work* work_item) {
   printk("command.type is UserId\n");
 
   uint16_t hub_id;
+  size_t err_size = 210;
+  char err_msg[err_size] = "";
   is_making_network_request = true;
-  int err = network_reqs->handle_get_token_and_hub_id(command.value, hub_mac, &hub_id);
+  int err = network_reqs->handle_get_token_and_hub_id(command.value, hub_mac, &hub_id, err_msg);
   is_making_network_request = false;
   if (err) {
     printk("Unable to get token and hub_id\n");
+    snprintk(command_char_val, err_size, "Error:%s", err_msg);
     return;
   }
   if (phone_conn) {

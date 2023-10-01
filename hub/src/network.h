@@ -53,8 +53,11 @@ public:
   /**
    * Sends a request containing query to API_URL, returns a json document with
    * response in the "data" field if no errors, otherwise errors will be in "errors"
+   * @param query The query to send to the API
+   * @param out_result_msg Optional buffer to store error message in
+   * @return The json document returned from the API, or nullptr if there was an error
   **/
-  cJSON* send_request(char* query);
+  cJSON* send_request(char* query, char* out_result_msg = nullptr);
 
   /**
    * Utility function to set AT+CFUN=1 or 4 (1 = full, 4 = airplane mode)

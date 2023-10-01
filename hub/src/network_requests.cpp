@@ -10,14 +10,14 @@ void NetworkRequests::init(Network* network_ptr) {
   network = network_ptr;
 }
 
-int NetworkRequests::handle_get_token_and_hub_id(char* user_id, char* hub_addr, uint16_t* out_hub_id) {
+int NetworkRequests::handle_get_token_and_hub_id(char* user_id, char* hub_addr, uint16_t* out_hub_id, char* out_result_msg) {
   printk("Preparing to login as Hub....\n");
   int ret = -1;
   if (network->set_power_on_and_wait_for_reg()) {
     size_t len = 200 + strlen(user_id) + strlen(hub_addr) + strlen(network->device_imei);
     char mutation[len];
     snprintk(mutation, len, "{\\\"query\\\":\\\"mutation loginAndFetchHub{loginAndFetchHub(userId:%s,serial:\\\\\"%s\\\\\",imei:\\\\\"%s\\\\\",version:\\\\\"%s\\\\\"){hub{id},token}}\\\",\\\"variables\\\":{}}", user_id, hub_addr, network->device_imei, VERSION);
-    cJSON* doc = network->send_request(mutation);
+    cJSON* doc = network->send_request(mutation, out_result_msg);
     cJSON* resp = cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "loginAndFetchHub");
     cJSON* token = cJSON_GetObjectItem(resp, "token");
     cJSON* id = cJSON_GetObjectItem(cJSON_GetObjectItem(resp, "hub"), "id");
@@ -70,14 +70,14 @@ int NetworkRequests::handle_send_event(char* sensor_addr, sensor_details_t* sens
   return ret;
 }
 
-int NetworkRequests::handle_add_new_sensor(char* sensor_addr, sensor_details_t* sensor_details, uint8_t door_column, uint8_t door_row) {
+int NetworkRequests::handle_add_new_sensor(char* sensor_addr, sensor_details_t* sensor_details, uint8_t door_column, uint8_t door_row, char* out_result_msg) {
   printk("Preparing to add new sensor....\n");
   int ret = -1;
   if (network->set_power_on_and_wait_for_reg()) {
     size_t len = 190 + strlen(sensor_addr);
     char mutation[len];
     snprintk(mutation, len, "{\\\"query\\\":\\\"mutation CreateSensor{createSensor(doorColumn:%u,doorRow:%u,serial:\\\\\"%s\\\\\",batteryLevel:%u,batteryVolts:%u,version:\\\\\"%s\\\\\"){id}}\\\",\\\"variables\\\":{}}", door_column, door_row, sensor_addr, sensor_details->battery_level, sensor_details->battery_volts, sensor_details->firmware_version);
-    cJSON* doc = network->send_request(mutation);
+    cJSON* doc = network->send_request(mutation, out_result_msg);
     cJSON* id = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(doc, "data"), "createSensor"), "id");
     if (id) {
       const uint16_t id_int = (const uint16_t)(id->valueint);
