@@ -20,9 +20,10 @@ extern "C"
 
   /**
    * @brief Run a full diagnostic test.
+   * @param out_result_msg Optional buffer to store result summary in
    * @return 0 on success, other numbers on error
    */
-  int diagnostic_run();
+  int diagnostic_run(char* out_result_msg = nullptr);
 
 #ifdef __cplusplus
 }

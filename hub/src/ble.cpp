@@ -58,6 +58,8 @@ static uint8_t hub_mac_bytes[MANU_DATA_LEN] = {0, 0};
 
 const char* COMMAND_START_SENSOR_SEARCH = "StartSensorSearch";
 const char* COMMAND_SENSOR_CONNECT = "SensorConnect";
+const char* COMMAND_START_DIAGNOSTIC = "StartDiagnostic";
+const char* COMMAND_DIAGNOSTIC_RESULT = "DiagnosticResult";
 
 static struct bt_conn* phone_conn;
 static struct bt_conn* sensor_conn;
@@ -114,6 +116,19 @@ static void handle_add_sensor_work(struct k_work* work_item) {
   bt_conn_disconnect(sensor_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 }
 
+static void diagnostic_work(struct k_work* work_item) {
+  printk("handling diagnostic work\n");
+  char result_msg[210] = "";
+  diagnostic_run(result_msg);
+  k_msleep(200);
+  while(diagnostic_running) {
+    k_msleep(100);
+    snprintk(command_char_val, 200, "%s:%s", COMMAND_DIAGNOSTIC_RESULT, result_msg);
+  }
+  k_msleep(2000);
+  snprintk(command_char_val, 30, "%s:END", COMMAND_DIAGNOSTIC_RESULT);
+}
+
 static ssize_t read_command_char(struct bt_conn* conn, const struct bt_gatt_attr* attr,
   void* buf, uint16_t len, uint16_t offset)
 {
@@ -146,6 +161,10 @@ static ssize_t write_command_char(struct bt_conn* conn, const struct bt_gatt_att
       door_row = command.value[1] - '0';
       printk("Connecting to sensor at door_column %u, door_row %u\n", door_column, door_row);
       k_work_init(&work, handle_add_sensor_work);
+      k_work_submit_to_queue(&ble_work_q, &work);
+    } else if (strcmp(command.type, COMMAND_START_DIAGNOSTIC) == 0) {
+      printk("Starting diagnostic\n");
+      k_work_init(&work, diagnostic_work);
       k_work_submit_to_queue(&ble_work_q, &work);
     }
   }

@@ -1,5 +1,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+#include <string.h>
 
 #include "diagnostic.h"
 
@@ -7,6 +8,8 @@ static NetworkRequests *network_reqs;
 static Network *network;
 
 bool diagnostic_running = false;
+
+static char* msg_result;
 
 static struct k_work work;
 static struct k_work_q diagnostic_work_q;
@@ -66,6 +69,7 @@ static void diagnostic_work(struct k_work* work_item) {
     }
 
     if(!network->send_test_request()) {
+      if(msg_result) snprintk(msg_result, 50, "Test mode %u [FAIL]: %lldms\n", (uint8_t) modes[i], total_time[i]);
       printk("\tSend test request failed\n");
       continue;
     }
@@ -75,6 +79,7 @@ static void diagnostic_work(struct k_work* work_item) {
       fastest_mode = i;
     }
     printk("<<<>>> Total time in test mode %u: %lld\n", (uint8_t) modes[i], total_time[i]);
+    if(msg_result) snprintk(msg_result, 40, "Total time in mode %u: %lldms\n", (uint8_t) modes[i], total_time[i]);
   }
 
   printk("<<<>>> ***** Printing summary *****\n");
@@ -101,11 +106,12 @@ static void diagnostic_work(struct k_work* work_item) {
   diagnostic_running = false;
 }
 
-int diagnostic_run() {
+int diagnostic_run(char* out_result_msg) {
   if(k_work_busy_get(&work) > 0) {
     printk("Diagnostic already running\n");
     return -1;
   }
+  msg_result = out_result_msg;
   k_work_init(&work, diagnostic_work);
   k_work_submit_to_queue(&diagnostic_work_q, &work);
   return 0;
