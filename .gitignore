@@ -8,10 +8,5 @@ build-*
 .vscode
 .DS_Store
 
-# Only get workspace folders that we care about (hub/sensor)
-/*
-!.gitignore
-!hub/
-
 # Env vars
 conf.*

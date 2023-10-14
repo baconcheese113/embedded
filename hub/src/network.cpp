@@ -109,7 +109,7 @@ cJSON* Network::send_request(char* query, char* out_result_msg) {
   };
 
   uint16_t commands_len = sizeof(commands) / sizeof(*commands);
-  int64_t timeout = 20000LL;
+  int64_t timeout = 40000LL;
   cJSON* doc;
 
   printk("Commands to iterate through: %u\n", commands_len);
@@ -384,6 +384,10 @@ bool Network::set_power_on_and_wait_for_reg(void) {
     set_power(false);
     return false;
   }
+  
+  serial_print_uart("AT+CSQ\r");
+  if (!serial_did_return_str("+CSQ: ", 4000LL)) return false;
+
   printk("Registered! Total Boot up time(ms): %lld\n", k_uptime_get() - start_time);
   return true;
 }
@@ -425,7 +429,7 @@ bool Network::send_test_request(void) {
   };
   
   uint16_t commands_len = sizeof(commands) / sizeof(*commands);
-  int64_t timeout = 15000LL;
+  int64_t timeout = 40000LL;
   bool success = false;
   for (uint8_t i = 0; i < commands_len; i++) {
     serial_print_uart(commands[i]);
